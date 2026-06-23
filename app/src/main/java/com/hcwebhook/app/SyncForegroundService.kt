@@ -60,7 +60,7 @@ class SyncForegroundService : Service() {
         scope.launch {
             try {
                 val syncManager = SyncManager(this@SyncForegroundService)
-                syncManager.performSync(syncType = "auto")
+                syncManager.performSyncWithCatchUp(syncType = "auto")
 
                 // Reschedule the daily alarm for the next occurrence
                 if (scheduleId != null) {
