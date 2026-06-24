@@ -253,47 +253,24 @@ class SyncManager(private val context: Context) {
         val now = Instant.now()
         val lastSyncMs = preferencesManager.getLastSyncTime()
 
-        // No prior successful sync, or the gap is within the normal lookback
-        // window: fall back to the standard incremental sync.
-        val gapThresholdMs = GAP_THRESHOLD_HOURS * 3_600_000L
-        if (lastSyncMs == null || now.toEpochMilli() - lastSyncMs <= gapThresholdMs) {
-            return@withContext performSync(syncType = syncType)
-        }
+        val slices = planCatchUpSlices(lastSyncMs, now)
+            ?: return@withContext performSync(syncType = syncType)
 
-        // Outage detected. Replay from the last successful sync forward, clamped
-        // to Health Connect's practical retention window, in bounded slices.
-        val earliestAllowed = now.minusSeconds(MAX_CATCHUP_DAYS * 24L * 3_600L)
-        var sliceStart = Instant.ofEpochMilli(lastSyncMs)
-        if (sliceStart.isBefore(earliestAllowed)) {
-            sliceStart = earliestAllowed
-        }
-
-        val sliceMillis = SLICE_HOURS * 3_600_000L
         var lastResult: Result<SyncResult> = Result.success(SyncResult.NoData)
-
-        while (sliceStart.isBefore(now)) {
-            val candidateEnd = sliceStart.plusMillis(sliceMillis)
-            val sliceEnd = if (candidateEnd.isAfter(now)) now else candidateEnd
-
+        for ((sliceStart, sliceEnd) in slices) {
             val result = performSync(
                 start = sliceStart,
                 end = sliceEnd,
                 syncType = "catchup",
                 updateLastSyncTime = false
             )
-            if (result.isFailure) {
-                return@withContext result
-            }
+            if (result.isFailure) return@withContext result
             // Checkpoint progress after each slice so a retry/restart resumes
             // from sliceEnd rather than replaying from the original start.
             preferencesManager.setLastSyncTime(sliceEnd.toEpochMilli())
             lastResult = result
-            sliceStart = sliceEnd
-            if (sliceStart.isBefore(now)) {
-                kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS)
-            }
+            if (sliceEnd.isBefore(now)) kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS)
         }
-
         lastResult
     }
 
@@ -307,6 +284,34 @@ class SyncManager(private val context: Context) {
         private const val SLICE_HOURS = 24L
         /** Small pause between slices to stay under HC rate limits. */
         private const val INTER_SLICE_DELAY_MS = 500L
+
+        /**
+         * Pure function: decides whether catch-up replay is needed and, if so, returns
+         * the ordered list of (sliceStart, sliceEnd) pairs to process. Returns null when
+         * the gap is within the normal lookback window and the caller should fall through
+         * to a standard incremental sync.
+         *
+         * Extracted for testability — the temporal logic has no Android dependencies.
+         */
+        internal fun planCatchUpSlices(lastSyncMs: Long?, now: Instant): List<Pair<Instant, Instant>>? {
+            if (lastSyncMs == null) return null
+            val gapThresholdMs = GAP_THRESHOLD_HOURS * 3_600_000L
+            if (now.toEpochMilli() - lastSyncMs <= gapThresholdMs) return null
+
+            val earliestAllowed = now.minusSeconds(MAX_CATCHUP_DAYS * 24L * 3_600L)
+            var sliceStart = Instant.ofEpochMilli(lastSyncMs)
+            if (sliceStart.isBefore(earliestAllowed)) sliceStart = earliestAllowed
+
+            val sliceMillis = SLICE_HOURS * 3_600_000L
+            val slices = mutableListOf<Pair<Instant, Instant>>()
+            while (sliceStart.isBefore(now)) {
+                val candidateEnd = sliceStart.plusMillis(sliceMillis)
+                val sliceEnd = if (candidateEnd.isAfter(now)) now else candidateEnd
+                slices.add(sliceStart to sliceEnd)
+                sliceStart = sliceEnd
+            }
+            return slices
+        }
     }
 
     private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
