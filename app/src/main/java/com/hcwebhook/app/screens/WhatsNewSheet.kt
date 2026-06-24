@@ -63,7 +63,6 @@ fun WhatsNewSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { WhatsNewSheetDragHandle() },
-        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
     ) {
         Column(
             modifier = Modifier
