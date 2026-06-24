@@ -199,6 +199,7 @@ class SyncManager(private val context: Context) {
                 }
 
                 if (!atLeastOneAttempted) {
+                    updateSyncTimestamps(healthData, mutableMapOf())
                     if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                     preferencesManager.setLastSyncSummary("No matching data")
                     return@withContext Result.success(SyncResult.NoMatchingData)
@@ -239,11 +240,11 @@ class SyncManager(private val context: Context) {
      *
      * Each slice runs through the existing explicit-range [performSync] path
      * (full read of the slice -> post -> advance per-type cursors). The global
-     * last-sync time is advanced only once, after the entire catch-up
-     * succeeds, so an interrupted catch-up resumes from the same point on the
-     * next run instead of silently skipping the remainder. Slicing also keeps
-     * each Health Connect query small, avoiding the rate-limit errors observed
-     * on large single-range reads (issue #45).
+     * last-sync time is checkpointed to sliceEnd after each successful slice so
+     * that an interrupted catch-up resumes from the last completed boundary on
+     * the next run rather than replaying from the original pre-outage start.
+     * Slicing also keeps each Health Connect query small, avoiding the
+     * rate-limit errors observed on large single-range reads (issue #45).
      *
      * When there is no meaningful gap this is a thin pass-through to the normal
      * incremental sync, so steady-state behaviour is unchanged.
@@ -281,12 +282,11 @@ class SyncManager(private val context: Context) {
                 updateLastSyncTime = false
             )
             if (result.isFailure) {
-                // Leave the global last-sync time untouched so the next run
-                // resumes from the same point. Per-type cursors already advanced
-                // for completed slices; the receiver is expected to upsert any
-                // duplicates produced when a partially-completed catch-up retries.
                 return@withContext result
             }
+            // Checkpoint progress after each slice so a retry/restart resumes
+            // from sliceEnd rather than replaying from the original start.
+            preferencesManager.setLastSyncTime(sliceEnd.toEpochMilli())
             lastResult = result
             sliceStart = sliceEnd
             if (sliceStart.isBefore(now)) {
@@ -294,14 +294,13 @@ class SyncManager(private val context: Context) {
             }
         }
 
-        // Entire window replayed successfully: close the gap exactly once.
-        preferencesManager.setLastSyncTime(now.toEpochMilli())
         lastResult
     }
 
     companion object {
-        /** Gap (since last successful sync) beyond which catch-up replay kicks in. */
-        private const val GAP_THRESHOLD_HOURS = 48L
+        /** Must equal HealthConnectManager.LOOKBACK_HOURS — catch-up fires when the gap
+         *  exceeds the normal read window, so the two values are semantically coupled. */
+        private const val GAP_THRESHOLD_HOURS = HealthConnectManager.LOOKBACK_HOURS
         /** Upper bound on how far back catch-up will reach (Health Connect retention). */
         private const val MAX_CATCHUP_DAYS = 30L
         /** Size of each replay slice; keeps individual HC reads small. */

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A short-lived foreground service that performs a single background sync.
@@ -26,7 +27,7 @@ import kotlinx.coroutines.launch
  *
  * The service:
  *  1. Promotes itself to foreground with a transient notification.
- *  2. Calls [SyncManager.performSync].
+ *  2. Calls [SyncManager.performSyncWithCatchUp].
  *  3. Reschedules the next alarm (for SCHEDULED mode).
  *  4. Calls stopSelf() — the notification disappears automatically.
  */
@@ -34,6 +35,8 @@ class SyncForegroundService : Service() {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    private val syncManager: SyncManager by lazy { SyncManager(this) }
+    private val isSyncing = AtomicBoolean(false)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,9 +60,14 @@ class SyncForegroundService : Service() {
         val scheduleId = intent?.getStringExtra(EXTRA_SCHEDULE_ID)
         Log.d(TAG, "Starting foreground sync (scheduleId=$scheduleId)")
 
+        if (!isSyncing.compareAndSet(false, true)) {
+            Log.d(TAG, "Sync already in progress, ignoring duplicate start (scheduleId=$scheduleId)")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         scope.launch {
             try {
-                val syncManager = SyncManager(this@SyncForegroundService)
                 syncManager.performSyncWithCatchUp(syncType = "auto")
 
                 // Reschedule the daily alarm for the next occurrence
@@ -76,6 +84,7 @@ class SyncForegroundService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "Sync failed in foreground service: ${e.message}", e)
             } finally {
+                isSyncing.set(false)
                 stopSelf(startId)
             }
         }
