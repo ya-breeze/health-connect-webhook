@@ -141,7 +141,7 @@ object MockPayloadBuilder {
                         put("time", t(7, 0).toString())
                         put("delta_celsius", 0.1)
                         put("baseline_celsius", 36.5)
-                        put("measurement_location", "wrist")
+                        put("measurement_location", 3) // SkinTemperatureRecord.MEASUREMENT_LOCATION_WRIST
                     })
                 }
             }
