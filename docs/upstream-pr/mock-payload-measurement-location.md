@@ -21,8 +21,8 @@ existing report of this mismatch was found. The closest hit, **#25 "Add support 
 SkinTemperatureRecord"** (the original feature request), confirms the field is meant to carry
 Health Connect's integer `measurementLocation` — consistent with this being a genuine bug in the
 mock rather than an intentional format difference. Full search table:
-[`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/feat/offline-catchup-sync-upstream/docs/upstream-pr/prior-art.md)
-on the fork (not part of this branch's diff).
+[`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md)
+on the fork's `main` (deliberately not part of this branch's diff).
 
 ## Type of change
 - [x] Bug fix

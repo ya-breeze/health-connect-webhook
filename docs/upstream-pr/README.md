@@ -5,6 +5,12 @@ issue, no comment. Both branches below live only on this fork
 (`ya-breeze/health-connect-webhook`). Opening the pull requests on upstream is the owner's step;
 the commands below are ready to run by hand.
 
+**Merge this idea branch to the fork's `main` before running them.** Both pull request bodies
+cite the prior-art search at
+`https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md`,
+which only resolves once this branch is on `main`. The upstream-ready branches themselves carry
+no `docs/upstream-pr/` file by design, so the link cannot point at them.
+
 ## Branch 1 — Catch-up sync (the main submission)
 
 - Branch: `feat/offline-catchup-sync-upstream`
@@ -87,7 +93,9 @@ gh pr create --repo mcnaveen/health-connect-webhook \
     a **second** `companion object` inside `SyncManager`, which Kotlin rejects (one companion
     object per class). Commit `0032356` moves them into the class's existing companion object.
     Static review caught this only because no compiler is available here — treat the Gradle gate
-    below as the real check, not this note.
+    below as the real check, not this note. The branch head is correct, but the three commits
+    before `0032356` do not compile on their own, so the upstream pull request must be
+    **squash-merged**; the PR body says so.
   - **Neither branch is described as CI-clean anywhere in this handoff or the PR bodies** — the
     PR body checklists mark local testing as not run and ask the maintainer/CI to run the Gradle
     gate before merging.

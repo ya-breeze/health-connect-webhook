@@ -19,13 +19,13 @@ of, not instead of, the existing mechanism.
 ## Prior art
 Searched upstream issues and PRs for `catch-up`, `catchup`, `backfill`, `offline`, `missed data`,
 `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY` — full results in
-[`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/feat/offline-catchup-sync-upstream/docs/upstream-pr/prior-art.md)
-on the fork (not part of this branch's diff). No prior rejection was found. The closest related
-work is **PR #6, "Historical data sync"** (merged), which added *manual* selection of an
-arbitrary historical date range gated behind `READ_HEALTH_DATA_HISTORY`. That solves a different
-problem — a user manually pulling an old range on request — while this PR makes the
-*scheduled/interval* sync recover automatically after an outage, with no user action. The two
-are complementary. **PR #52, "retry + throttle Health Connect reads"** (merged) is
+[`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md)
+on the fork's `main` (deliberately not part of this branch's diff). No prior rejection was found.
+The closest related work is **PR #6, "Historical data sync"** (merged), which added *manual*
+selection of an arbitrary historical date range gated behind `READ_HEALTH_DATA_HISTORY`. That
+solves a different problem — a user manually pulling an old range on request — while this PR
+makes the *scheduled/interval* sync recover automatically after an outage, with no user action.
+The two are complementary. **PR #52, "retry + throttle Health Connect reads"** (merged) is
 infrastructure this PR depends on, described above.
 
 ## Type of change
@@ -73,7 +73,8 @@ infrastructure this PR depends on, described above.
   upstream's own `SyncForegroundService` duplicate-run guard (added in a more recent upstream
   commit than the fork branched from) — the fork's now-redundant duplicate copy of that guard was
   dropped rather than merged in. The branch head also carries a follow-up `fix:` commit that
-  moves the catch-up constants into `SyncManager`'s existing companion object; squash on merge if
-  you prefer a single commit.
+  moves the catch-up constants into `SyncManager`'s existing companion object. That fix is what
+  makes the class compile, so the three commits before it do not build on their own — please
+  squash on merge rather than keeping the individual commits.
 
 Created by Claude
