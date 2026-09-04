@@ -43,13 +43,11 @@ infrastructure this PR depends on, described above.
 - [x] I added/updated tests (if needed) — `SyncManagerCatchUpTest` (14 cases) covering slice
       planning at its edges.
 - [x] I verified there are no breaking changes — `performSync`'s new `updateLastSyncTime`
-      parameter defaults to `true`, so no existing call site has to change. Two behaviour
-      changes are intentional and worth calling out in review: the new
-      `performSyncWithCatchUp` entry point (used by `SyncWorker` and `SyncForegroundService`),
-      and the `NoMatchingData` path in `performSync`, which now advances the per-type cursors.
-      Without that second change, a webhook data-type filter that excludes every record would
-      leave the cursors parked while the global last-sync time moved on, so the next
-      incremental sync would re-read the whole accumulated gap at once.
+      parameter defaults to `true`, so no existing call site has to change. The one behaviour
+      change worth calling out in review is the new `performSyncWithCatchUp` entry point, which
+      `SyncWorker` and `SyncForegroundService` now call instead of `performSync`. Every other
+      code path — manual sync, the local HTTP server, and `performSync` itself when the gap is
+      within the lookback window — behaves exactly as before.
 - [x] I checked for sensitive data/secrets
 
 ## Gates run
@@ -69,12 +67,10 @@ infrastructure this PR depends on, described above.
 - Built directly on `upstream/main` (this fork was 26 commits behind at the time of writing);
   this diff is what would actually merge.
 - This is a rebase of three commits from the fork's `feat/offline-catchup-sync` branch, reshaped
-  into upstream-style commits (`feat:`, then `test:` for the unit tests) and rebased past
-  upstream's own `SyncForegroundService` duplicate-run guard (added in a more recent upstream
-  commit than the fork branched from) — the fork's now-redundant duplicate copy of that guard was
-  dropped rather than merged in. The branch head also carries a follow-up `fix:` commit that
-  moves the catch-up constants into `SyncManager`'s existing companion object. That fix is what
-  makes the class compile, so the three commits before it do not build on their own — please
-  squash on merge rather than keeping the individual commits.
+  into two upstream-style commits (`feat:` for the feature, `test:` for the unit tests) and
+  rebased past upstream's own `SyncForegroundService` duplicate-run guard (added in a more recent
+  upstream commit than the fork branched from) — the fork's now-redundant duplicate copy of that
+  guard was dropped rather than merged in. Either commit is a valid tree on its own, so rebase,
+  squash, and merge commits all work.
 
 Created by Claude

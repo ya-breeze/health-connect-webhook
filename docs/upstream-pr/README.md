@@ -15,19 +15,19 @@ no `docs/upstream-pr/` file by design, so the link cannot point at them.
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base on `upstream/main`: `777ff1d6ede736a982506e220635f96d78767cc5`
-- Head: `0032356021ec82ebe3dc5e37214cc4fc2711b18c`
+- Head: `e06ee928bc1b52340f252bf81d670607a1d0daae` (two commits: `feat:`, then `test:`)
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 - Diffstat vs. `upstream/main`:
   ```
    README.md                                          |   4 +-
    .../java/com/hcwebhook/app/HealthConnectManager.kt |   2 +-
    .../com/hcwebhook/app/SyncForegroundService.kt     |   6 +-
-   app/src/main/java/com/hcwebhook/app/SyncManager.kt | 95 ++++++++++++-
+   app/src/main/java/com/hcwebhook/app/SyncManager.kt | 94 ++++++++++++-
    app/src/main/java/com/hcwebhook/app/SyncWorker.kt  |   2 +-
    .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 152 +++++++++++++++++++++
    docs/local-http.md                                 |   2 +-
    docs/webhook.md                                    |   3 +
-   8 files changed, 254 insertions(+), 12 deletions(-)
+   8 files changed, 253 insertions(+), 12 deletions(-)
   ```
 
 Command to open the pull request:
@@ -91,11 +91,20 @@ gh pr create --repo mcnaveen/health-connect-webhook \
     (which had shifted as the file grew).
   - A follow-up review pass over the rebased diff found that the catch-up constants had landed in
     a **second** `companion object` inside `SyncManager`, which Kotlin rejects (one companion
-    object per class). Commit `0032356` moves them into the class's existing companion object.
-    Static review caught this only because no compiler is available here — treat the Gradle gate
-    below as the real check, not this note. The branch head is correct, but the three commits
-    before `0032356` do not compile on their own, so the upstream pull request must be
-    **squash-merged**; the PR body says so.
+    object per class). The branch was rebuilt so that fix sits inside the `feat:` commit rather
+    than a later one, and `SyncManager.kt` now declares exactly one `companion object` at every
+    commit. Static review caught this only because no compiler is available here — treat the
+    Gradle gate below as the real check, not this note.
+  - The same pass removed an unrelated behaviour change that the fork's own review commit had
+    added to `performSync`'s `NoMatchingData` path: it advanced the per-type cursors when a
+    webhook data-type filter excluded every record. Its stated reason was that a stale cursor
+    would make the next incremental sync "re-read the whole accumulated gap at once", which
+    cannot happen — `HealthConnectManager.readHealthData` caps the default window at
+    `LOOKBACK_HOURS` and the per-type cursor only filters inside that window
+    (`readRawStepsData`: `.filter { lastSync == null || it.endTime >= lastSync }`). Advancing
+    the cursor there marked records as synced that no webhook had received, so widening a
+    filter or adding a webhook afterwards would never deliver them. Catch-up does not need it —
+    `performSyncWithCatchUp` checkpoints the global last-sync time itself, per slice.
   - **Neither branch is described as CI-clean anywhere in this handoff or the PR bodies** — the
     PR body checklists mark local testing as not run and ask the maintainer/CI to run the Gradle
     gate before merging.
