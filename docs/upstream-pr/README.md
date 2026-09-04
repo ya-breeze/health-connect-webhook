@@ -9,19 +9,19 @@ the commands below are ready to run by hand.
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base on `upstream/main`: `777ff1d6ede736a982506e220635f96d78767cc5`
-- Head: `d0775f46cbc59a3c3534ea57bbc9011e4812a069`
+- Head: `0032356021ec82ebe3dc5e37214cc4fc2711b18c`
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 - Diffstat vs. `upstream/main`:
   ```
    README.md                                          |   4 +-
    .../java/com/hcwebhook/app/HealthConnectManager.kt |   2 +-
    .../com/hcwebhook/app/SyncForegroundService.kt     |   6 +-
-   app/src/main/java/com/hcwebhook/app/SyncManager.kt | 97 ++++++++++++-
+   app/src/main/java/com/hcwebhook/app/SyncManager.kt | 95 ++++++++++++-
    app/src/main/java/com/hcwebhook/app/SyncWorker.kt  |   2 +-
    .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 152 +++++++++++++++++++++
    docs/local-http.md                                 |   2 +-
    docs/webhook.md                                    |   3 +
-   8 files changed, 256 insertions(+), 12 deletions(-)
+   8 files changed, 254 insertions(+), 12 deletions(-)
   ```
 
 Command to open the pull request:
@@ -83,6 +83,11 @@ gh pr create --repo mcnaveen/health-connect-webhook \
   - The mock-payload bug was re-confirmed by reading the three cited file locations on current
     `upstream/main` before writing the one-line fix, rather than trusting the idea's line numbers
     (which had shifted as the file grew).
+  - A follow-up review pass over the rebased diff found that the catch-up constants had landed in
+    a **second** `companion object` inside `SyncManager`, which Kotlin rejects (one companion
+    object per class). Commit `0032356` moves them into the class's existing companion object.
+    Static review caught this only because no compiler is available here — treat the Gradle gate
+    below as the real check, not this note.
   - **Neither branch is described as CI-clean anywhere in this handoff or the PR bodies** — the
     PR body checklists mark local testing as not run and ask the maintainer/CI to run the Gradle
     gate before merging.

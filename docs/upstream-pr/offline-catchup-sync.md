@@ -40,11 +40,16 @@ infrastructure this PR depends on, described above.
       `./gradlew assembleDebug` / `test` / `lint` could not be executed here. See "Gates run" below.
 - [x] I updated documentation (if needed) — README.md (Known Limitations, webhook format
       paragraph), docs/webhook.md, docs/local-http.md.
-- [x] I added/updated tests (if needed) — `SyncManagerCatchUpTest` (13 cases) covering slice
+- [x] I added/updated tests (if needed) — `SyncManagerCatchUpTest` (14 cases) covering slice
       planning at its edges.
 - [x] I verified there are no breaking changes — `performSync`'s new `updateLastSyncTime`
-      parameter defaults to `true`, so every existing call site is unaffected; the only
-      behaviour change is in the new `performSyncWithCatchUp` entry point.
+      parameter defaults to `true`, so no existing call site has to change. Two behaviour
+      changes are intentional and worth calling out in review: the new
+      `performSyncWithCatchUp` entry point (used by `SyncWorker` and `SyncForegroundService`),
+      and the `NoMatchingData` path in `performSync`, which now advances the per-type cursors.
+      Without that second change, a webhook data-type filter that excludes every record would
+      leave the cursors parked while the global last-sync time moved on, so the next
+      incremental sync would re-read the whole accumulated gap at once.
 - [x] I checked for sensitive data/secrets
 
 ## Gates run
@@ -64,9 +69,11 @@ infrastructure this PR depends on, described above.
 - Built directly on `upstream/main` (this fork was 26 commits behind at the time of writing);
   this diff is what would actually merge.
 - This is a rebase of three commits from the fork's `feat/offline-catchup-sync` branch, reshaped
-  into two upstream-style commits (`feat:`, `test:`) and rebased past upstream's own
-  `SyncForegroundService` duplicate-run guard (added in a more recent upstream commit than the
-  fork branched from) — the fork's now-redundant duplicate copy of that guard was dropped rather
-  than merged in.
+  into upstream-style commits (`feat:`, then `test:` for the unit tests) and rebased past
+  upstream's own `SyncForegroundService` duplicate-run guard (added in a more recent upstream
+  commit than the fork branched from) — the fork's now-redundant duplicate copy of that guard was
+  dropped rather than merged in. The branch head also carries a follow-up `fix:` commit that
+  moves the catch-up constants into `SyncManager`'s existing companion object; squash on merge if
+  you prefer a single commit.
 
 Created by Claude

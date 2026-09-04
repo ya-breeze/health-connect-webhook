@@ -1,7 +1,7 @@
 ## Summary
 - `MockPayloadBuilder.kt:157` emits `put("measurement_location", "wrist")` — a **string** — for
   the mock `skin_temperature` payload.
-- The real payload emits an **integer**: `SyncManager.kt:722` does
+- The real payload emits an **integer**: `SyncManager.kt:723` does
   `put("measurement_location", skin.measurementLocation)`, where
   `SkinTemperatureData.measurementLocation` is declared `Int` (`HealthConnectManager.kt:285`).
 - `docs/webhook.md:154` documents the field as `number (integer)` — the AndroidX
