@@ -43,68 +43,68 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Establish the real upstream baseline
 
-- [ ] Add an `upstream` remote pointing at `https://github.com/mcnaveen/health-connect-webhook.git` and fetch it. Read the GitHub token from `/data/data.json` if authentication is needed.
-- [ ] Fetch `origin` and confirm that `origin/feat/offline-catchup-sync` and `origin/feat/update-dependencies` exist; the local clone currently packs only `origin/main`.
-- [ ] Record the current ahead/behind counts of `origin/main`, `origin/feat/offline-catchup-sync`, and `origin/feat/update-dependencies` against `upstream/main`. Report the measured numbers rather than the numbers quoted in the idea, which are now stale.
-- [ ] Confirm that `feat/offline-catchup-sync` contains exactly `c85c2c39`, `df941326`, and `3d75519a`, and that `feat/update-dependencies` adds `299e41e0`, `07030b59`, and `3e85b813` on top. If the SHAs no longer resolve, find the equivalent commits by subject and record the new SHAs.
-- [ ] Read the three catch-up commits in full and write a short description of what they change: which files, which functions, which preference keys, and whether the feature is opt-in or on by default.
-- [ ] Mark completed
+- [x] Add an `upstream` remote pointing at `https://github.com/mcnaveen/health-connect-webhook.git` and fetch it. Read the GitHub token from `/data/data.json` if authentication is needed.
+- [x] Fetch `origin` and confirm that `origin/feat/offline-catchup-sync` and `origin/feat/update-dependencies` exist; the local clone currently packs only `origin/main`.
+- [x] Record the current ahead/behind counts of `origin/main`, `origin/feat/offline-catchup-sync`, and `origin/feat/update-dependencies` against `upstream/main`. Report the measured numbers rather than the numbers quoted in the idea, which are now stale.
+- [x] Confirm that `feat/offline-catchup-sync` contains exactly `c85c2c39`, `df941326`, and `3d75519a`, and that `feat/update-dependencies` adds `299e41e0`, `07030b59`, and `3e85b813` on top. If the SHAs no longer resolve, find the equivalent commits by subject and record the new SHAs.
+- [x] Read the three catch-up commits in full and write a short description of what they change: which files, which functions, which preference keys, and whether the feature is opt-in or on by default.
+- [x] Mark completed
 
 ### Task 2: Investigate whether upstream already rejected this
 
-- [ ] Search upstream issues and pull requests, open and closed, for prior proposals. Cover at least: `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`.
-- [ ] For every plausible match, record the number, title, state, author, and — when it was closed without merging — the maintainer's stated reason, quoted verbatim with a link.
-- [ ] Search separately for prior reports of the `measurement_location` mock payload mismatch, so the second pull request does not duplicate an existing one.
-- [ ] Write `docs/upstream-pr/prior-art.md` with a table of searches run, hits found, and the verdict for each. State explicitly when a search found nothing; an empty result is a finding and must be visible.
-- [ ] If a maintainer previously rejected an equivalent proposal, state that at the top of the file, explain whether the rebased branch answers the objection, and carry that conclusion into the pull request body in Task 5.
-- [ ] Mark completed
+- [x] Search upstream issues and pull requests, open and closed, for prior proposals. Cover at least: `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`.
+- [x] For every plausible match, record the number, title, state, author, and — when it was closed without merging — the maintainer's stated reason, quoted verbatim with a link.
+- [x] Search separately for prior reports of the `measurement_location` mock payload mismatch, so the second pull request does not duplicate an existing one.
+- [x] Write `docs/upstream-pr/prior-art.md` with a table of searches run, hits found, and the verdict for each. State explicitly when a search found nothing; an empty result is a finding and must be visible.
+- [x] If a maintainer previously rejected an equivalent proposal, state that at the top of the file, explain whether the rebased branch answers the objection, and carry that conclusion into the pull request body in Task 5.
+- [x] Mark completed
 
 ### Task 3: Build the upstream-ready catch-up branch
 
-- [ ] Create `feat/offline-catchup-sync-upstream` from `upstream/main`.
-- [ ] Cherry-pick `c85c2c39`, `df941326`, and `3d75519a` onto it in that order.
-- [ ] Resolve conflicts against current upstream code, specifically: the `dataTypeResolutions` parameter and per-type resolution helpers in `HealthConnectManager.readHealthData`; inter-page throttling in `readAllRecords` (`READ_PAGE_DELAY_MS`, `PAGINATED_READ_THROTTLE_TYPES`); rate-limit backoff in `withHealthConnectRetry`; `clampedMaxEndMs` and the per-webhook `dataTypeFilter` path in `SyncManager.performSync`.
-- [ ] Make catch-up window slicing go through upstream's existing retry and throttle paths instead of adding a second mechanism. A multi-day replay issues many more Health Connect reads than a 48-hour sync, and upstream added that throttling for exactly this failure mode.
-- [ ] Keep any new preference keys consistent with `PreferencesManager`: a `private const val KEY_…` in the companion object plus paired getter and setter, matching the surrounding style.
-- [ ] Update `README.md` (the Known Limitations 48-hour entry and the webhook format paragraph), `docs/webhook.md`, and `docs/local-http.md` wherever the branch changes the described window or watermark behaviour.
-- [ ] Reshape the history into a small number of conventional commits — a `feat:` for the feature and a `test:` for the unit tests — with messages written for an upstream reader who has no context on this fork.
-- [ ] Verify the branch excludes the cleartext and dependency changes: `AndroidManifest.xml`, `network_security_config`, `gradle/libs.versions.toml`, and `app/build.gradle.kts` must not appear in the diff against `upstream/main` unless the feature genuinely requires them, and `MockPayloadBuilder.kt` must not appear at all.
-- [ ] Confirm the branch carries no idea-forge artifact: no `docs/specs/` file and no `docs/upstream-pr/` file.
-- [ ] Push the branch to `origin` only.
-- [ ] Mark completed
+- [x] Create `feat/offline-catchup-sync-upstream` from `upstream/main`.
+- [x] Cherry-pick `c85c2c39`, `df941326`, and `3d75519a` onto it in that order.
+- [x] Resolve conflicts against current upstream code, specifically: the `dataTypeResolutions` parameter and per-type resolution helpers in `HealthConnectManager.readHealthData`; inter-page throttling in `readAllRecords` (`READ_PAGE_DELAY_MS`, `PAGINATED_READ_THROTTLE_TYPES`); rate-limit backoff in `withHealthConnectRetry`; `clampedMaxEndMs` and the per-webhook `dataTypeFilter` path in `SyncManager.performSync`.
+- [x] Make catch-up window slicing go through upstream's existing retry and throttle paths instead of adding a second mechanism. A multi-day replay issues many more Health Connect reads than a 48-hour sync, and upstream added that throttling for exactly this failure mode.
+- [x] Keep any new preference keys consistent with `PreferencesManager`: a `private const val KEY_…` in the companion object plus paired getter and setter, matching the surrounding style.
+- [x] Update `README.md` (the Known Limitations 48-hour entry and the webhook format paragraph), `docs/webhook.md`, and `docs/local-http.md` wherever the branch changes the described window or watermark behaviour.
+- [x] Reshape the history into a small number of conventional commits — a `feat:` for the feature and a `test:` for the unit tests — with messages written for an upstream reader who has no context on this fork.
+- [x] Verify the branch excludes the cleartext and dependency changes: `AndroidManifest.xml`, `network_security_config`, `gradle/libs.versions.toml`, and `app/build.gradle.kts` must not appear in the diff against `upstream/main` unless the feature genuinely requires them, and `MockPayloadBuilder.kt` must not appear at all.
+- [x] Confirm the branch carries no idea-forge artifact: no `docs/specs/` file and no `docs/upstream-pr/` file.
+- [x] Push the branch to `origin` only.
+- [x] Mark completed
 
 ### Task 4: Gate the branch
 
-- [ ] Run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the branch, mirroring `.github/workflows/ci.yml`.
-- [ ] If the Android SDK is unavailable and the commands cannot run, record that fact verbatim in the handoff, name what was verified instead, and do not describe the branch as CI-clean.
-- [ ] Confirm the catch-up unit tests sit under `app/src/test/java/com/hcwebhook/app/`, use JUnit 4 imports (`org.junit.Test`, `org.junit.Assert`), and follow the naming style of `DashboardFormatterTest`.
-- [ ] Confirm the tests cover slice planning at its edges: no prior watermark, a watermark inside the normal window, a watermark days old, and a watermark in the future.
-- [ ] Mark completed
+- [x] Run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the branch, mirroring `.github/workflows/ci.yml`.
+- [x] If the Android SDK is unavailable and the commands cannot run, record that fact verbatim in the handoff, name what was verified instead, and do not describe the branch as CI-clean.
+- [x] Confirm the catch-up unit tests sit under `app/src/test/java/com/hcwebhook/app/`, use JUnit 4 imports (`org.junit.Test`, `org.junit.Assert`), and follow the naming style of `DashboardFormatterTest`.
+- [x] Confirm the tests cover slice planning at its edges: no prior watermark, a watermark inside the normal window, a watermark days old, and a watermark in the future.
+- [x] Mark completed
 
 ### Task 5: Write the catch-up pull request body
 
-- [ ] Write `docs/upstream-pr/offline-catchup-sync.md` following `.github/PULL_REQUEST_TEMPLATE.md` section for section, in the template's order.
-- [ ] In Summary, state the user-visible problem (data lost when the device is offline or the app is not running longer than the documented 48-hour window), the approach, and whether the behaviour is opt-in or default.
-- [ ] Explain the interaction with Health Connect rate limits and how the branch stays inside upstream's existing throttle and retry logic.
-- [ ] Add a prior-art paragraph summarising Task 2, linking any related upstream issue or pull request, and answering any earlier objection directly.
-- [ ] Fill the Type of change and Checklist sections truthfully, reflecting the gates that actually ran in Task 4.
-- [ ] List the documentation files the branch updates, so the maintainer can see the specs stayed in sync.
-- [ ] End with the authorship marker `Created by Claude`, as this environment requires for agent-authored GitHub content.
-- [ ] Mark completed
+- [x] Write `docs/upstream-pr/offline-catchup-sync.md` following `.github/PULL_REQUEST_TEMPLATE.md` section for section, in the template's order.
+- [x] In Summary, state the user-visible problem (data lost when the device is offline or the app is not running longer than the documented 48-hour window), the approach, and whether the behaviour is opt-in or default.
+- [x] Explain the interaction with Health Connect rate limits and how the branch stays inside upstream's existing throttle and retry logic.
+- [x] Add a prior-art paragraph summarising Task 2, linking any related upstream issue or pull request, and answering any earlier objection directly.
+- [x] Fill the Type of change and Checklist sections truthfully, reflecting the gates that actually ran in Task 4.
+- [x] List the documentation files the branch updates, so the maintainer can see the specs stayed in sync.
+- [x] End with the authorship marker `Created by Claude`, as this environment requires for agent-authored GitHub content.
+- [x] Mark completed
 
 ### Task 6: Handle the side commits separately
 
-- [ ] Re-verify the mock payload bug on current `upstream/main`: `MockPayloadBuilder.kt:144` emits a string while `SyncManager.kt:624` emits `Int` and `docs/webhook.md:154` documents `number (integer)`. If upstream has already fixed it, drop this submission and say so.
-- [ ] Create `fix/mock-payload-measurement-location` from `upstream/main` containing only that one-line fix, with a `fix:` commit message, and push it to `origin`.
-- [ ] Write `docs/upstream-pr/mock-payload-measurement-location.md` using the same template, citing the three file locations as evidence, and end it with `Created by Claude`.
-- [ ] Record in `docs/upstream-pr/prior-art.md` why `299e41e0` (dependency bump) and `07030b59` (cleartext HTTP) are not being sent upstream, in one short paragraph each.
-- [ ] Leave `feat/update-dependencies` and `feat/offline-catchup-sync` on the fork untouched, so the deployment keeps building from them.
-- [ ] Mark completed
+- [x] Re-verify the mock payload bug on current `upstream/main`: `MockPayloadBuilder.kt:144` emits a string while `SyncManager.kt:624` emits `Int` and `docs/webhook.md:154` documents `number (integer)`. If upstream has already fixed it, drop this submission and say so.
+- [x] Create `fix/mock-payload-measurement-location` from `upstream/main` containing only that one-line fix, with a `fix:` commit message, and push it to `origin`.
+- [x] Write `docs/upstream-pr/mock-payload-measurement-location.md` using the same template, citing the three file locations as evidence, and end it with `Created by Claude`.
+- [x] Record in `docs/upstream-pr/prior-art.md` why `299e41e0` (dependency bump) and `07030b59` (cleartext HTTP) are not being sent upstream, in one short paragraph each.
+- [x] Leave `feat/update-dependencies` and `feat/offline-catchup-sync` on the fork untouched, so the deployment keeps building from them.
+- [x] Mark completed
 
 ### Task 7: Hand off to the owner
 
-- [ ] Write `docs/upstream-pr/README.md` listing each upstream-ready branch, its head SHA, its base SHA on `upstream/main`, its pull request body file, and its diffstat.
-- [ ] Include the exact `gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:<branch> --base main --body-file <path>` command for each submission, clearly marked as a command for the owner to run. Do not run it.
-- [ ] State plainly which gates ran and which did not, and repeat that nothing was written to `mcnaveen/health-connect-webhook`.
-- [ ] Confirm every unticked box in this spec is now resolved, and that `docs/upstream-pr/` contains the prior-art file, both pull request bodies, and this handoff note.
-- [ ] Mark completed
+- [x] Write `docs/upstream-pr/README.md` listing each upstream-ready branch, its head SHA, its base SHA on `upstream/main`, its pull request body file, and its diffstat.
+- [x] Include the exact `gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:<branch> --base main --body-file <path>` command for each submission, clearly marked as a command for the owner to run. Do not run it.
+- [x] State plainly which gates ran and which did not, and repeat that nothing was written to `mcnaveen/health-connect-webhook`.
+- [x] Confirm every unticked box in this spec is now resolved, and that `docs/upstream-pr/` contains the prior-art file, both pull request bodies, and this handoff note.
+- [x] Mark completed
