@@ -2012,7 +2012,7 @@ class HealthConnectManager(private val context: Context) {
     }
 
     companion object {
-        private const val LOOKBACK_HOURS = 48L
+        internal const val LOOKBACK_HOURS = 48L
 
         private const val RATE_LIMIT_MAX_ATTEMPTS = 4
         private const val RATE_LIMIT_INITIAL_DELAY_MS = 1_000L

@@ -245,7 +245,7 @@ Default port is **8787** (configurable **1024–65535**). Example: `http://192.1
 
 ### Webhook format
 
-Delivery is **`POST`** with **`Content-Type: application/json; charset=utf-8`**. The body is one JSON object: always **`timestamp`** (when the payload was built) and **`app_version`**, plus optional **snake_case** arrays per data type (each key omitted if there are no records in that batch). Background sync reads a rolling **48-hour** window and, by default, only records **new since the last successful sync** per type (first run has no prior watermark).
+Delivery is **`POST`** with **`Content-Type: application/json; charset=utf-8`**. The body is one JSON object: always **`timestamp`** (when the payload was built) and **`app_version`**, plus optional **snake_case** arrays per data type (each key omitted if there are no records in that batch). Background sync reads a rolling **48-hour** window and, by default, only records **new since the last successful sync** per type (first run has no prior watermark). If the gap since the last successful scheduled sync exceeds 48 hours, the missed period is replayed automatically in bounded slices, up to 30 days back, before the app returns to its normal 48-hour window.
 
 Full field tables, units, nutrition/skin-temperature notes, and examples: **[docs/webhook.md](docs/webhook.md)**.
 
@@ -264,7 +264,7 @@ The local server returns the **same JSON schema** via **`GET`**; semantics (incr
 ## Known Limitations
 
 - ⚠️ **Offline Handling** - The app attempts to retry failed webhook requests briefly (3 retries). If the internet is unavailable, the sync fails safely and data is retried on the next successful sync trigger (manual, interval, or scheduled).
-- 🕒 **48-Hour Lookback** - To ensure performance and relevance, the app scans for health data within a rolling 48-hour window. Data older than 48 hours may not be synced if the app was not running or configured during that time.
+- 🕒 **48-Hour Lookback** - To ensure performance and relevance, the app scans for health data within a rolling 48-hour window. This applies to manual sync and the local HTTP server. Scheduled/interval sync additionally catches up automatically: if it detects a gap since the last successful sync longer than 48 hours (e.g. the phone was off the home network for several days), it replays the missed period from that point forward in bounded slices, up to 30 days back.
 - 🔋 **Local Server Reliability** - The local HTTP server runs as a foreground service, but availability can still be affected by Doze mode, Wi-Fi sleep, and aggressive OEM battery optimization.
 
 ## Technical Details

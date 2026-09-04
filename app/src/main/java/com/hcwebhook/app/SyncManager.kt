@@ -92,7 +92,7 @@ class SyncManager(private val context: Context) {
         }
     }
 
-    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
+    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null, updateLastSyncTime: Boolean = true): Result<SyncResult> = withContext(Dispatchers.IO) {
         /*
         Supports two modes:
         - timeRangeDays: the amount of days in the past to sync.
@@ -142,7 +142,7 @@ class SyncManager(private val context: Context) {
 
             // Check if there's any new data
             if (isHealthDataEmpty(healthData)) {
-                preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                 preferencesManager.setLastSyncSummary("No new data")
                 return@withContext Result.success(SyncResult.NoData)
             }
@@ -240,7 +240,7 @@ class SyncManager(private val context: Context) {
                 }
 
                 if (!atLeastOneAttempted) {
-                    preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                    if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                     preferencesManager.setLastSyncSummary("No matching data")
                     return@withContext Result.success(SyncResult.NoMatchingData)
                 }
@@ -255,7 +255,7 @@ class SyncManager(private val context: Context) {
 
             // Save last sync status for UI display
             val summary = buildSyncSummary(healthData)
-            preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+            if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
             preferencesManager.setLastSyncSummary(summary)
 
             Result.success(SyncResult.Success(syncCounts))
@@ -271,6 +271,54 @@ class SyncManager(private val context: Context) {
                 )
             )
         }
+    }
+
+    /**
+     * Auto/scheduled entry point that is resilient to the webhook destination
+     * being unreachable for longer than the normal lookback window (e.g. the
+     * phone being off the home network while travelling).
+     *
+     * The default [performSync] only reads a fixed trailing window
+     * (LOOKBACK_HOURS, currently 48h), so any data produced while delivery was
+     * failing for longer than that is never re-read and is lost. This wrapper
+     * detects an outage by comparing now against the last *successful* sync
+     * time and, when the gap exceeds the lookback window, replays the missed
+     * period from that point forward in bounded slices.
+     *
+     * Each slice runs through the existing explicit-range [performSync] path
+     * (full read of the slice -> post -> advance per-type cursors). The global
+     * last-sync time is checkpointed to sliceEnd after each successful slice so
+     * that an interrupted catch-up resumes from the last completed boundary on
+     * the next run rather than replaying from the original pre-outage start.
+     * Slicing also keeps each Health Connect query small, avoiding the
+     * rate-limit errors observed on large single-range reads (issue #45).
+     *
+     * When there is no meaningful gap this is a thin pass-through to the normal
+     * incremental sync, so steady-state behaviour is unchanged.
+     */
+    suspend fun performSyncWithCatchUp(syncType: String = "auto"): Result<SyncResult> = withContext(Dispatchers.IO) {
+        val now = Instant.now()
+        val lastSyncMs = preferencesManager.getLastSyncTime()
+
+        val slices = planCatchUpSlices(lastSyncMs, now)
+            ?: return@withContext performSync(syncType = syncType)
+
+        var lastResult: Result<SyncResult> = Result.success(SyncResult.NoData)
+        for ((sliceStart, sliceEnd) in slices) {
+            val result = performSync(
+                start = sliceStart,
+                end = sliceEnd,
+                syncType = "catchup",
+                updateLastSyncTime = false
+            )
+            if (result.isFailure) return@withContext result
+            // Checkpoint progress after each slice so a retry/restart resumes
+            // from sliceEnd rather than replaying from the original start.
+            preferencesManager.setLastSyncTime(sliceEnd.toEpochMilli())
+            lastResult = result
+            if (sliceEnd.isBefore(now)) kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS)
+        }
+        lastResult
     }
 
     private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
@@ -966,6 +1014,44 @@ class SyncManager(private val context: Context) {
          * exceed this and OOMs mid-tier devices while building JsonObject trees.
          */
         private const val MAX_RECORDS_PER_PAYLOAD = 25_000
+
+        /** Must equal HealthConnectManager.LOOKBACK_HOURS — catch-up fires when the gap
+         *  exceeds the normal read window, so the two values are semantically coupled. */
+        private const val GAP_THRESHOLD_HOURS = HealthConnectManager.LOOKBACK_HOURS
+        /** Upper bound on how far back catch-up will reach (Health Connect retention). */
+        private const val MAX_CATCHUP_DAYS = 30L
+        /** Size of each replay slice; keeps individual HC reads small. */
+        private const val SLICE_HOURS = 24L
+        /** Small pause between slices to stay under HC rate limits. */
+        private const val INTER_SLICE_DELAY_MS = 500L
+
+        /**
+         * Pure function: decides whether catch-up replay is needed and, if so, returns
+         * the ordered list of (sliceStart, sliceEnd) pairs to process. Returns null when
+         * the gap is within the normal lookback window and the caller should fall through
+         * to a standard incremental sync.
+         *
+         * Extracted for testability — the temporal logic has no Android dependencies.
+         */
+        internal fun planCatchUpSlices(lastSyncMs: Long?, now: Instant): List<Pair<Instant, Instant>>? {
+            if (lastSyncMs == null) return null
+            val gapThresholdMs = GAP_THRESHOLD_HOURS * 3_600_000L
+            if (now.toEpochMilli() - lastSyncMs <= gapThresholdMs) return null
+
+            val earliestAllowed = now.minusSeconds(MAX_CATCHUP_DAYS * 24L * 3_600L)
+            var sliceStart = Instant.ofEpochMilli(lastSyncMs)
+            if (sliceStart.isBefore(earliestAllowed)) sliceStart = earliestAllowed
+
+            val sliceMillis = SLICE_HOURS * 3_600_000L
+            val slices = mutableListOf<Pair<Instant, Instant>>()
+            while (sliceStart.isBefore(now)) {
+                val candidateEnd = sliceStart.plusMillis(sliceMillis)
+                val sliceEnd = if (candidateEnd.isAfter(now)) now else candidateEnd
+                slices.add(sliceStart to sliceEnd)
+                sliceStart = sliceEnd
+            }
+            return slices
+        }
     }
 
     private data class BmiEntry(

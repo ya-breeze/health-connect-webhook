@@ -244,7 +244,7 @@ Entries are ordered newest-first. Note that calling `/server-logs` itself is rec
 | Aspect | Webhooks (POST) | Local HTTP (`GET /`) |
 |--------|------------------|------------------------|
 | Trigger | Interval / schedule / manual sync | Your client polls |
-| Time window (default) | Last **48 h** with **incremental** per-type watermarks | Last **48 h**, **full** read in window (no watermarks) |
+| Time window (default) | Last **48 h** with **incremental** per-type watermarks; interval/schedule sync additionally replays gaps longer than 48 h automatically, in 24 h slices, up to 30 days back | Last **48 h**, **full** read in window (no watermarks) |
 | `GET /?days=N` | N/A | **N** full days back from now |
 | JSON schema | [webhook.md](./webhook.md) | Same |
 

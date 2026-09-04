@@ -38,6 +38,9 @@ Unless noted otherwise, time-valued fields use **`java.time.Instant.toString()`*
 - **Explicit range** (e.g. local HTTP `?days=7` or a chosen start/end)  
   Uses the requested window and **does not** apply last-sync filtering; the payload can contain all records in that range for enabled types.
 
+- **Scheduled/interval catch-up** (gap since the last successful sync exceeds 48 hours)  
+  Also an explicit range internally: the missed period is split into 24-hour slices and each slice is delivered as its own full-window payload, oldest first, until the gap is closed (clamped to 30 days back). The app then returns to the normal 48-hour incremental window.
+
 Only types the user enabled **and** granted Health Connect permission for are read; others simply produce no arrays.
 
 ---
