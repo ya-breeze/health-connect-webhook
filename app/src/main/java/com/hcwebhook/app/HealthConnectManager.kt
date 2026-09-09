@@ -1047,7 +1047,11 @@ class HealthConnectManager(private val context: Context) {
             if (daySteps > 0) {
                 result.add(StepsData(
                     count = daySteps,
-                    startTime = dayStart,
+                    // Use the clamped window start, not local midnight: the oldest
+                    // bucket in a lookback window covers only the elapsed part of
+                    // the day, so a midnight start_time would mislabel a partial
+                    // day as a full one. See issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
@@ -1260,7 +1264,8 @@ class HealthConnectManager(private val context: Context) {
             if (dayDistance > 0.0) {
                 result.add(DistanceData(
                     meters = dayDistance,
-                    startTime = dayStart,
+                    // Clamped window start, not local midnight — see issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
@@ -1357,7 +1362,8 @@ class HealthConnectManager(private val context: Context) {
             if (dayCalories > 0.0) {
                 result.add(ActiveCaloriesData(
                     calories = dayCalories,
-                    startTime = dayStart,
+                    // Clamped window start, not local midnight — see issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
@@ -1437,7 +1443,8 @@ class HealthConnectManager(private val context: Context) {
                 result.add(
                     TotalCaloriesData(
                         calories = dayCalories,
-                        startTime = dayStart,
+                        // Clamped window start, not local midnight — see issue #72.
+                        startTime = queryStart,
                         endTime = queryEnd,
                     ),
                 )
@@ -1776,7 +1783,8 @@ class HealthConnectManager(private val context: Context) {
 
             val dayLiters = readRawHydrationData(queryStart, queryEnd, null).sumOf { it.liters }
             if (dayLiters > 0.0) {
-                result.add(HydrationData(dayLiters, dayStart, queryEnd))
+                // Clamped window start, not local midnight — see issue #72.
+                result.add(HydrationData(dayLiters, queryStart, queryEnd))
             }
         }
         return result
@@ -1874,7 +1882,8 @@ class HealthConnectManager(private val context: Context) {
 
             val dayRecords = readRawNutritionData(queryStart, queryEnd, null)
             if (dayRecords.isNotEmpty()) {
-                result.add(mergeNutritionRecords(dayRecords, dayStart, queryEnd))
+                // Clamped window start, not local midnight — see issue #72.
+                result.add(mergeNutritionRecords(dayRecords, queryStart, queryEnd))
             }
         }
         return result
