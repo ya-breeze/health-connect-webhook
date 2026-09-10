@@ -154,6 +154,17 @@
     <string name="webhooks_new_url_label">新しい Webhook URL</string>
     <string name="webhooks_action_add">Webhook の追加</string>
     <string name="webhooks_toast_invalid_url">有効なHTTP/HTTPS URLを入力してください</string>
+    <string name="webhooks_toast_invalid_target">有効な HTTP URL または gRPC ターゲット（ホスト:ポート）を入力してください</string>
+    <string name="webhooks_delivery_section">配信形式</string>
+    <string name="webhooks_delivery_json">JSON（HTTP POST）</string>
+    <string name="webhooks_delivery_grpc">Protobuf / gRPC</string>
+    <string name="webhooks_delivery_grpc_hint">ターゲット: ホスト:ポート、https://ホスト、または http://ホスト:ポート。サーバーは HealthWebhook.Deliver を実装し、ok=true を返す必要があります。</string>
+    <string name="webhooks_delivery_share_proto">スキーマを共有（.proto）</string>
+    <string name="webhooks_delivery_share_proto_title">protobuf スキーマを共有</string>
+    <string name="webhooks_delivery_share_proto_failed">スキーマを共有できませんでした: %1$s</string>
+    <string name="webhooks_delivery_format_label">%1$s</string>
+    <string name="webhooks_url_label_json">Webhook URL</string>
+    <string name="webhooks_url_label_grpc">gRPC ターゲット</string>
     <string name="webhooks_headers_manage_title">ヘッダーの管理</string>
     <string name="webhooks_headers_for_url">%1$s のヘッダー</string>
     <string name="webhooks_headers_empty">ヘッダーは追加されていません</string>
@@ -325,6 +336,11 @@
     <string name="logs_filter_all">すべて</string>
     <string name="logs_filter_success">成功</string>
     <string name="logs_filter_error">エラー</string>
+    <string name="logs_filter_delivery">配信</string>
+    <string name="logs_filter_json">JSON</string>
+    <string name="logs_filter_grpc">gRPC</string>
+    <string name="logs_delivery_json">JSON 配信</string>
+    <string name="logs_delivery_grpc">gRPC 配信</string>
     <string name="logs_limit_label">%1$d 件表示</string>
     <string name="logs_response_time">%1$d ms</string>
     <string name="logs_sync_manual">手動</string>

@@ -133,11 +133,14 @@ Unless noted otherwise, time-valued fields use **`java.time.Instant.toString()`*
 
 ### Which records appear (incremental vs full window)
 
-- **Background / manual sync (default)**  
+- **Manual / local API sync (default)**
   Reads within a rolling **48-hour** window (`HealthConnectManager`) and, for each enabled type, applies the **last successful sync instant** for that type so only **new or updated** records (relative to that watermark) are included. First sync has no watermark, so everything in the window can appear.
 
 - **Explicit range** (e.g. local HTTP `?days=7` or a chosen start/end)  
   Uses the requested window and **does not** apply last-sync filtering; the payload can contain all records in that range for enabled types.
+
+- **Scheduled / interval sync**
+  Reads from a dedicated last-successful automatic cursor to a boundary captured before the read, independently of the general last-sync status and per-type watermarks updated by manual or local API activity. If that automatic-delivery gap exceeds 48 hours, the missed period is delivered oldest first as explicit 24-hour slices, using the same filtering and JSON or gRPC delivery paths as ordinary syncs, and is clamped to 30 days. Existing installs seed this cursor once from their general last-sync timestamp.
 
 Only types the user enabled **and** granted Health Connect permission for are read; others simply produce no arrays.
 

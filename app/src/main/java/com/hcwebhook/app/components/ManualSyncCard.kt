@@ -188,10 +188,21 @@ fun ManualSyncCard(onSyncCompleted: () -> Unit = {}) {
                                     }
 
                                     syncMessage = context.getString(R.string.manual_sync_progress, startDate.toString(), endDate.toString())
-                                    syncManager.performSync(start = startInstant, end = endInstant, syncType = "manual", targetWebhooks = targetWebhooks)
+                                    syncManager.performSync(
+                                        start = startInstant,
+                                        end = endInstant,
+                                        syncType = "manual",
+                                        targetWebhooks = targetWebhooks,
+                                        requireAllWebhookDeliveries = false,
+                                    )
                                 } else {
                                     // sync the last N days, or from the last sync
-                                    syncManager.performSync(timeRangeSelection, syncType = "manual", targetWebhooks = targetWebhooks)
+                                    syncManager.performSync(
+                                        timeRangeSelection,
+                                        syncType = "manual",
+                                        targetWebhooks = targetWebhooks,
+                                        requireAllWebhookDeliveries = false,
+                                    )
                                 }
 
                                 when {

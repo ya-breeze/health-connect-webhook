@@ -25,6 +25,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_ENABLED_DATA_TYPES = "enabled_data_types"
         private const val KEY_WEBHOOK_LOGS = "webhook_logs"
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val KEY_LAST_AUTOMATIC_SYNC_TIME = "last_automatic_sync_time"
         private const val KEY_LAST_SYNC_SUMMARY = "last_sync_summary"
         private const val DEFAULT_SYNC_INTERVAL_MINUTES = 60
         private const val MAX_LOGS = 100
@@ -294,6 +295,15 @@ class PreferencesManager(context: Context) {
 
     fun setLastSyncTime(timestamp: Long) {
         prefs.edit().putLong(KEY_LAST_SYNC_TIME, timestamp).apply()
+    }
+
+    fun getLastAutomaticSyncTime(): Long? {
+        val timestamp = prefs.getLong(KEY_LAST_AUTOMATIC_SYNC_TIME, -1)
+        return if (timestamp == -1L) null else timestamp
+    }
+
+    fun setLastAutomaticSyncTime(timestamp: Long) {
+        prefs.edit().putLong(KEY_LAST_AUTOMATIC_SYNC_TIME, timestamp).apply()
     }
 
     fun getLastSyncSummary(): String? {

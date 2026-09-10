@@ -92,7 +92,7 @@ class SyncManager(private val context: Context) {
         }
     }
 
-    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
+    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null, requireAllWebhookDeliveries: Boolean, updateLastSyncTime: Boolean = true, defaultReadEnd: Instant? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
         /*
         Supports two modes:
         - timeRangeDays: the amount of days in the past to sync.
@@ -114,10 +114,9 @@ class SyncManager(private val context: Context) {
                 return@withContext Result.failure(Exception("No data types enabled"))
             }
 
-            // Keep incremental sync only for default mode.
-            // Explicit ranges (start/end or timeRangeDays) always perform a full read of that window.
-            val hasExplicitRange = start != null || end != null || timeRangeDays != null
-            val lastSyncTimestamps = if (!hasExplicitRange) {
+            // Keep per-type incremental cursors only for unbounded manual/API mode.
+            // Explicit ranges and automatic reads with a captured boundary read their full window.
+            val lastSyncTimestamps = if (shouldUsePerTypeCursors(timeRangeDays, start, end, defaultReadEnd)) {
                 enabledTypes.associateWith { type ->
                     preferencesManager.getLastSyncTimestamp(type)?.let { Instant.ofEpochMilli(it) }
                 }
@@ -131,7 +130,7 @@ class SyncManager(private val context: Context) {
                 lastSyncTimestamps = lastSyncTimestamps,
                 timeRangeDays = timeRangeDays,
                 start = start,
-                end = end,
+                end = end ?: defaultReadEnd,
                 dataTypeResolutions = preferencesManager.getDataTypeResolutions(),
             )
             if (healthDataResult.isFailure) {
@@ -142,7 +141,7 @@ class SyncManager(private val context: Context) {
 
             // Check if there's any new data
             if (isHealthDataEmpty(healthData)) {
-                preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                 preferencesManager.setLastSyncSummary("No new data")
                 return@withContext Result.success(SyncResult.NoData)
             }
@@ -175,6 +174,7 @@ class SyncManager(private val context: Context) {
             if (enabledWebhookConfigs.isNotEmpty()) {
                 var atLeastOneSuccess = false
                 var atLeastOneAttempted = false
+                var atLeastOneFailure = false
                 var lastFailure: Throwable? = null
 
                 val dispatcher = NotificationDispatcher()
@@ -196,6 +196,7 @@ class SyncManager(private val context: Context) {
                             val payload = try {
                                 if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
                             } catch (oom: OutOfMemoryError) {
+                                atLeastOneFailure = true
                                 lastFailure = Exception(
                                     "Out of memory while building JSON for ${config.url}. Raise sample resolution.",
                                     oom
@@ -216,6 +217,7 @@ class SyncManager(private val context: Context) {
                             val grpcPayload = try {
                                 ProtobufPayloadBuilder.build(filteredData, appVersionName)
                             } catch (oom: OutOfMemoryError) {
+                                atLeastOneFailure = true
                                 lastFailure = Exception(
                                     "Out of memory while building protobuf for ${config.url}. Raise sample resolution.",
                                     oom
@@ -250,6 +252,7 @@ class SyncManager(private val context: Context) {
                             aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg)
                         }
                     } else {
+                        atLeastOneFailure = true
                         lastFailure = result.exceptionOrNull()
                         val msg = "❌ ${config.url}: ${lastFailure?.message ?: "Error"}"
                         notifConfigs.forEach { nc ->
@@ -269,11 +272,11 @@ class SyncManager(private val context: Context) {
                 }
 
                 if (!atLeastOneAttempted) {
-                    preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                    if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                     preferencesManager.setLastSyncSummary("No matching data")
                     return@withContext Result.success(SyncResult.NoMatchingData)
                 }
-                if (!atLeastOneSuccess) {
+                if (!webhookBatchSucceeded(atLeastOneSuccess, atLeastOneFailure, requireAllWebhookDeliveries)) {
                     return@withContext Result.failure(lastFailure ?: Exception("Failed to post to webhooks"))
                 }
             }
@@ -284,7 +287,7 @@ class SyncManager(private val context: Context) {
 
             // Save last sync status for UI display
             val summary = buildSyncSummary(healthData)
-            preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+            if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
             preferencesManager.setLastSyncSummary(summary)
 
             Result.success(SyncResult.Success(syncCounts))
@@ -300,6 +303,42 @@ class SyncManager(private val context: Context) {
                 )
             )
         }
+    }
+
+    /**
+     * Automatic entry point that replays delivery gaps longer than the normal
+     * Health Connect lookback window. Manual and local API syncs continue to
+     * call [performSync] directly and cannot move automatic replay progress.
+     *
+     * Existing installs seed the dedicated automatic cursor once from the
+     * general last-sync timestamp. From then on, only successful automatic
+     * work advances it. Each catch-up slice uses the same explicit-range
+     * [performSync] path as other syncs, including JSON/gRPC delivery,
+     * filtering, retry, pagination throttling, logging, and cursor updates.
+     */
+    suspend fun performSyncWithCatchUp(syncType: String = "auto"): Result<SyncResult> = withContext(Dispatchers.IO) {
+        val startedAt = Instant.now()
+        runAutomaticSync(
+            automaticSyncMs = preferencesManager.getLastAutomaticSyncTime(),
+            generalSyncMs = preferencesManager.getLastSyncTime(),
+            now = startedAt,
+            syncType = syncType,
+            persistAutomaticSyncMs = preferencesManager::setLastAutomaticSyncTime,
+            persistGeneralSyncMs = preferencesManager::setLastSyncTime,
+            completionTimeMs = { Instant.now().toEpochMilli() },
+            sync = { start, end, effectiveSyncType, isReplaySlice ->
+                val request = automaticSyncRequest(start, end, effectiveSyncType, isReplaySlice)
+                performSync(
+                    start = request.start,
+                    end = request.end,
+                    syncType = request.syncType,
+                    requireAllWebhookDeliveries = request.requireAllWebhookDeliveries,
+                    updateLastSyncTime = request.updateLastSyncTime,
+                    defaultReadEnd = request.defaultReadEnd,
+                )
+            },
+            pauseBetweenSlices = { kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS) },
+        )
     }
 
     private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
@@ -995,6 +1034,155 @@ class SyncManager(private val context: Context) {
          * exceed this and OOMs mid-tier devices while building JsonObject trees.
          */
         private const val MAX_RECORDS_PER_PAYLOAD = 25_000
+
+        /** Coupled to the default Health Connect read window. */
+        private const val GAP_THRESHOLD_HOURS = HealthConnectManager.LOOKBACK_HOURS
+        private const val MAX_CATCHUP_DAYS = 30L
+        private const val SLICE_HOURS = 24L
+        private const val INTER_SLICE_DELAY_MS = 500L
+
+        internal data class AutomaticSyncCursorSelection(
+            val timestampMs: Long?,
+            val seededFromGeneral: Boolean,
+        )
+
+        /** Selects dedicated progress, or a one-time compatibility seed. */
+        internal fun selectAutomaticSyncCursor(
+            automaticSyncMs: Long?,
+            generalSyncMs: Long?,
+        ): AutomaticSyncCursorSelection = when {
+            automaticSyncMs != null -> AutomaticSyncCursorSelection(automaticSyncMs, false)
+            generalSyncMs != null -> AutomaticSyncCursorSelection(generalSyncMs, true)
+            else -> AutomaticSyncCursorSelection(null, false)
+        }
+
+        /** Advances progress only for a successfully completed automatic unit. */
+        internal fun nextAutomaticSyncCursor(
+            currentCursorMs: Long?,
+            completedBoundaryMs: Long,
+            syncSucceeded: Boolean,
+        ): Long? {
+            if (!syncSucceeded) return currentCursorMs
+            return completedBoundaryMs
+        }
+
+        /** Automatic replay is complete only when every attempted destination succeeds. */
+        internal fun webhookBatchSucceeded(
+            atLeastOneSuccess: Boolean,
+            atLeastOneFailure: Boolean,
+            requireAllWebhookDeliveries: Boolean,
+        ): Boolean = atLeastOneSuccess && (!requireAllWebhookDeliveries || !atLeastOneFailure)
+
+        internal data class AutomaticSyncRequest(
+            val start: Instant?,
+            val end: Instant?,
+            val defaultReadEnd: Instant?,
+            val syncType: String,
+            val updateLastSyncTime: Boolean,
+            val requireAllWebhookDeliveries: Boolean,
+        )
+
+        /** Maps orchestration boundaries to the normal or explicit-range sync path. */
+        internal fun automaticSyncRequest(
+            start: Instant?,
+            boundary: Instant?,
+            syncType: String,
+            isReplaySlice: Boolean,
+        ): AutomaticSyncRequest {
+            return AutomaticSyncRequest(
+                start = start,
+                end = if (isReplaySlice) boundary else null,
+                defaultReadEnd = if (isReplaySlice) null else boundary,
+                syncType = syncType,
+                updateLastSyncTime = !isReplaySlice,
+                requireAllWebhookDeliveries = true,
+            )
+        }
+
+        /** Per-type progress belongs only to unbounded manual/API incremental reads. */
+        internal fun shouldUsePerTypeCursors(
+            timeRangeDays: Int?,
+            start: Instant?,
+            end: Instant?,
+            defaultReadEnd: Instant?,
+        ): Boolean = timeRangeDays == null && start == null && end == null && defaultReadEnd == null
+
+        /**
+         * Runs automatic progress orchestration behind injectable boundaries so
+         * cursor persistence and failure sequencing can be covered by JVM tests.
+         */
+        internal suspend fun runAutomaticSync(
+            automaticSyncMs: Long?,
+            generalSyncMs: Long?,
+            now: Instant,
+            syncType: String,
+            persistAutomaticSyncMs: (Long) -> Unit,
+            persistGeneralSyncMs: (Long) -> Unit,
+            completionTimeMs: () -> Long,
+            sync: suspend (Instant?, Instant?, String, Boolean) -> Result<SyncResult>,
+            pauseBetweenSlices: suspend () -> Unit,
+        ): Result<SyncResult> {
+            val cursorSelection = selectAutomaticSyncCursor(automaticSyncMs, generalSyncMs)
+            var cursorMs = cursorSelection.timestampMs
+            if (cursorSelection.seededFromGeneral) {
+                persistAutomaticSyncMs(cursorMs!!)
+            }
+
+            val slices = planCatchUpSlices(cursorMs, now)
+            if (slices == null) {
+                val normalStart = cursorMs
+                    ?.takeIf { it <= now.toEpochMilli() }
+                    ?.let(Instant::ofEpochMilli)
+                val result = sync(normalStart, now, syncType, false)
+                val nextCursor = nextAutomaticSyncCursor(cursorMs, now.toEpochMilli(), result.isSuccess)
+                if (nextCursor != cursorMs) persistAutomaticSyncMs(nextCursor!!)
+                return result
+            }
+
+            var lastResult: Result<SyncResult> = Result.success(SyncResult.NoData)
+            for ((sliceStart, sliceEnd) in slices) {
+                val result = sync(sliceStart, sliceEnd, "catchup", true)
+                val nextCursor = nextAutomaticSyncCursor(
+                    currentCursorMs = cursorMs,
+                    completedBoundaryMs = sliceEnd.toEpochMilli(),
+                    syncSucceeded = result.isSuccess,
+                )
+                if (nextCursor != cursorMs) {
+                    persistAutomaticSyncMs(nextCursor!!)
+                    cursorMs = nextCursor
+                }
+                if (result.isFailure) return result
+                lastResult = result
+                if (sliceEnd.isBefore(now)) pauseBetweenSlices()
+            }
+
+            persistGeneralSyncMs(completionTimeMs())
+            return lastResult
+        }
+
+        /**
+         * Returns ordered 24-hour replay slices when the stored automatic
+         * cursor is more than one normal lookback window behind [now].
+         */
+        internal fun planCatchUpSlices(lastSyncMs: Long?, now: Instant): List<Pair<Instant, Instant>>? {
+            if (lastSyncMs == null) return null
+            val gapThresholdMs = GAP_THRESHOLD_HOURS * 3_600_000L
+            if (now.toEpochMilli() - lastSyncMs <= gapThresholdMs) return null
+
+            val earliestAllowed = now.minusSeconds(MAX_CATCHUP_DAYS * 24L * 3_600L)
+            var sliceStart = Instant.ofEpochMilli(lastSyncMs)
+            if (sliceStart.isBefore(earliestAllowed)) sliceStart = earliestAllowed
+
+            val sliceMillis = SLICE_HOURS * 3_600_000L
+            val slices = mutableListOf<Pair<Instant, Instant>>()
+            while (sliceStart.isBefore(now)) {
+                val candidateEnd = sliceStart.plusMillis(sliceMillis)
+                val sliceEnd = if (candidateEnd.isAfter(now)) now else candidateEnd
+                slices.add(sliceStart to sliceEnd)
+                sliceStart = sliceEnd
+            }
+            return slices
+        }
     }
 
     private data class BmiEntry(

@@ -154,6 +154,17 @@
     <string name="webhooks_new_url_label">새 웹훅 URL</string>
     <string name="webhooks_action_add">웹훅 추가</string>
     <string name="webhooks_toast_invalid_url">유효한 HTTP/HTTPS URL을 입력하세요.</string>
+    <string name="webhooks_toast_invalid_target">유효한 HTTP URL 또는 gRPC 대상(호스트:포트)을 입력하세요.</string>
+    <string name="webhooks_delivery_section">전송 형식</string>
+    <string name="webhooks_delivery_json">JSON(HTTP POST)</string>
+    <string name="webhooks_delivery_grpc">Protobuf / gRPC</string>
+    <string name="webhooks_delivery_grpc_hint">대상: 호스트:포트, https://호스트 또는 http://호스트:포트. 서버는 HealthWebhook.Deliver를 구현하고 ok=true를 반환해야 합니다.</string>
+    <string name="webhooks_delivery_share_proto">스키마 공유(.proto)</string>
+    <string name="webhooks_delivery_share_proto_title">protobuf 스키마 공유</string>
+    <string name="webhooks_delivery_share_proto_failed">스키마를 공유할 수 없습니다: %1$s</string>
+    <string name="webhooks_delivery_format_label">%1$s</string>
+    <string name="webhooks_url_label_json">웹훅 URL</string>
+    <string name="webhooks_url_label_grpc">gRPC 대상</string>
     <string name="webhooks_headers_manage_title">헤더 관리</string>
     <string name="webhooks_headers_for_url">%1$s에 대한 헤더</string>
     <string name="webhooks_headers_empty">헤더가 추가되지 않았습니다.</string>
@@ -325,6 +336,11 @@
     <string name="logs_filter_all">전체</string>
     <string name="logs_filter_success">성공</string>
     <string name="logs_filter_error">오류</string>
+    <string name="logs_filter_delivery">전송</string>
+    <string name="logs_filter_json">JSON</string>
+    <string name="logs_filter_grpc">gRPC</string>
+    <string name="logs_delivery_json">JSON 전송</string>
+    <string name="logs_delivery_grpc">gRPC 전송</string>
     <string name="logs_limit_label">%1$d 개 표시</string>
     <string name="logs_response_time">%1$d ms</string>
     <string name="logs_sync_manual">수동</string>

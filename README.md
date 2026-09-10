@@ -36,6 +36,11 @@ Protobuf/gRPC delivery · local HTTP server · webhook logs · settings
 backup/restore · 10 languages. Full list, supported apps, and data types:
 **[docs/features.md](docs/features.md)**.
 
+Interval and scheduled syncs keep dedicated last-successful automatic progress.
+After a gap longer than the normal 48-hour window, they replay missed delivery
+in 24-hour slices (up to 30 days). Manual sync and local API activity can update
+the displayed last-sync status, but never move this automatic catch-up cursor.
+
 ## Install
 
 ### Stable (recommended)

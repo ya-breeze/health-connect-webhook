@@ -17,7 +17,7 @@ class SyncWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val syncResult = syncManager.performSync()
+            val syncResult = syncManager.performSyncWithCatchUp()
             if (syncResult.isSuccess) {
                 Result.success()
             } else {

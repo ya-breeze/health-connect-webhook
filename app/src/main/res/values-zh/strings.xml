@@ -154,6 +154,17 @@
     <string name="webhooks_new_url_label">新的 Webhook URL</string>
     <string name="webhooks_action_add">添加网络钩子</string>
     <string name="webhooks_toast_invalid_url">请输入有效的 HTTP/HTTPS URL</string>
+    <string name="webhooks_toast_invalid_target">请输入有效的 HTTP URL 或 gRPC 目标（主机:端口）</string>
+    <string name="webhooks_delivery_section">传输格式</string>
+    <string name="webhooks_delivery_json">JSON（HTTP POST）</string>
+    <string name="webhooks_delivery_grpc">Protobuf / gRPC</string>
+    <string name="webhooks_delivery_grpc_hint">目标：主机:端口、https://主机或 http://主机:端口。服务器必须实现 HealthWebhook.Deliver 并返回 ok=true。</string>
+    <string name="webhooks_delivery_share_proto">共享架构（.proto）</string>
+    <string name="webhooks_delivery_share_proto_title">共享 protobuf 架构</string>
+    <string name="webhooks_delivery_share_proto_failed">无法共享架构：%1$s</string>
+    <string name="webhooks_delivery_format_label">%1$s</string>
+    <string name="webhooks_url_label_json">Webhook URL</string>
+    <string name="webhooks_url_label_grpc">gRPC 目标</string>
     <string name="webhooks_headers_manage_title">管理标头</string>
     <string name="webhooks_headers_for_url">%1$s 的标头</string>
     <string name="webhooks_headers_empty">没有添加标题</string>
@@ -325,6 +336,11 @@
     <string name="logs_filter_all">全部</string>
     <string name="logs_filter_success">成功</string>
     <string name="logs_filter_error">错误</string>
+    <string name="logs_filter_delivery">传输</string>
+    <string name="logs_filter_json">JSON</string>
+    <string name="logs_filter_grpc">gRPC</string>
+    <string name="logs_delivery_json">JSON 传输</string>
+    <string name="logs_delivery_grpc">gRPC 传输</string>
     <string name="logs_limit_label">显示 %1$d</string>
     <string name="logs_response_time">%1$d ms</string>
     <string name="logs_sync_manual">手动</string>

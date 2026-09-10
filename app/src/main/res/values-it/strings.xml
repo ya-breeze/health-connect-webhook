@@ -154,6 +154,17 @@
     <string name="webhooks_new_url_label">Nuovo URL del webhook</string>
     <string name="webhooks_action_add">Aggiungi webhook</string>
     <string name="webhooks_toast_invalid_url">Inserisci un URL HTTP/HTTPS valido</string>
+    <string name="webhooks_toast_invalid_target">Inserisci un URL HTTP valido o una destinazione gRPC (host:porta)</string>
+    <string name="webhooks_delivery_section">Formato di consegna</string>
+    <string name="webhooks_delivery_json">JSON (HTTP POST)</string>
+    <string name="webhooks_delivery_grpc">Protobuf / gRPC</string>
+    <string name="webhooks_delivery_grpc_hint">Destinazione: host:porta, https://host o http://host:porta. Il server deve implementare HealthWebhook.Deliver e restituire ok=true.</string>
+    <string name="webhooks_delivery_share_proto">Condividi schema (.proto)</string>
+    <string name="webhooks_delivery_share_proto_title">Condividi schema protobuf</string>
+    <string name="webhooks_delivery_share_proto_failed">Impossibile condividere lo schema: %1$s</string>
+    <string name="webhooks_delivery_format_label">%1$s</string>
+    <string name="webhooks_url_label_json">URL webhook</string>
+    <string name="webhooks_url_label_grpc">Destinazione gRPC</string>
     <string name="webhooks_headers_manage_title">Gestisci intestazioni</string>
     <string name="webhooks_headers_for_url">Intestazioni per %1$s</string>
     <string name="webhooks_headers_empty">Nessuna intestazione aggiunta</string>
@@ -325,6 +336,11 @@
     <string name="logs_filter_all">Tutti</string>
     <string name="logs_filter_success">Successo</string>
     <string name="logs_filter_error">Errore</string>
+    <string name="logs_filter_delivery">Consegna</string>
+    <string name="logs_filter_json">JSON</string>
+    <string name="logs_filter_grpc">gRPC</string>
+    <string name="logs_delivery_json">Consegna JSON</string>
+    <string name="logs_delivery_grpc">Consegna gRPC</string>
     <string name="logs_limit_label">Mostra %1$d</string>
     <string name="logs_response_time">%1$d ms</string>
     <string name="logs_sync_manual">Manuale</string>

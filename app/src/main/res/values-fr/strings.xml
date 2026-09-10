@@ -154,6 +154,17 @@
     <string name="webhooks_new_url_label">Nouvelle URL du webhook</string>
     <string name="webhooks_action_add">Ajouter un webhook</string>
     <string name="webhooks_toast_invalid_url">Veuillez saisir une URL HTTP/HTTPS valide</string>
+    <string name="webhooks_toast_invalid_target">Saisissez une URL HTTP valide ou une cible gRPC (hôte:port)</string>
+    <string name="webhooks_delivery_section">Format de livraison</string>
+    <string name="webhooks_delivery_json">JSON (HTTP POST)</string>
+    <string name="webhooks_delivery_grpc">Protobuf / gRPC</string>
+    <string name="webhooks_delivery_grpc_hint">Cible : hôte:port, https://hôte ou http://hôte:port. Le serveur doit implémenter HealthWebhook.Deliver et renvoyer ok=true.</string>
+    <string name="webhooks_delivery_share_proto">Partager le schéma (.proto)</string>
+    <string name="webhooks_delivery_share_proto_title">Partager le schéma protobuf</string>
+    <string name="webhooks_delivery_share_proto_failed">Impossible de partager le schéma : %1$s</string>
+    <string name="webhooks_delivery_format_label">%1$s</string>
+    <string name="webhooks_url_label_json">URL du webhook</string>
+    <string name="webhooks_url_label_grpc">Cible gRPC</string>
     <string name="webhooks_headers_manage_title">Gérer les en-têtes</string>
     <string name="webhooks_headers_for_url">En-têtes pour %1$s</string>
     <string name="webhooks_headers_empty">Aucun en-tête ajouté</string>
@@ -325,6 +336,11 @@
     <string name="logs_filter_all">Tous</string>
     <string name="logs_filter_success">Succès</string>
     <string name="logs_filter_error">Erreur</string>
+    <string name="logs_filter_delivery">Livraison</string>
+    <string name="logs_filter_json">JSON</string>
+    <string name="logs_filter_grpc">gRPC</string>
+    <string name="logs_delivery_json">Livraison JSON</string>
+    <string name="logs_delivery_grpc">Livraison gRPC</string>
     <string name="logs_limit_label">Afficher %1$d</string>
     <string name="logs_response_time">%1$d ms</string>
     <string name="logs_sync_manual">Manuel</string>

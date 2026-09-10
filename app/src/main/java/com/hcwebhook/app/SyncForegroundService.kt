@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * The service:
  *  1. Promotes itself to foreground with a transient notification.
- *  2. Calls [SyncManager.performSync].
+ *  2. Calls [SyncManager.performSyncWithCatchUp].
  *  3. Reschedules the next alarm (for SCHEDULED mode).
  *  4. Calls stopSelf() — the notification disappears automatically.
  */
@@ -35,6 +35,7 @@ class SyncForegroundService : Service() {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    private val syncManager: SyncManager by lazy { SyncManager(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -68,8 +69,7 @@ class SyncForegroundService : Service() {
 
         scope.launch {
             try {
-                val syncManager = SyncManager(this@SyncForegroundService)
-                syncManager.performSync(syncType = "auto")
+                syncManager.performSyncWithCatchUp(syncType = "auto")
 
                 // Reschedule the daily alarm for the next occurrence
                 rescheduleAlarmIfNeeded(scheduleId)
