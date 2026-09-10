@@ -59,8 +59,8 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 ### Task 4: Review the complete candidate and refresh its handoff
 
 - [ ] Verify the diff against the fetched `upstream/main` contains only the catch-up implementation, tests, and related documentation; specifically exclude `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/` from the upstream-ready branch.
-- [ ] Update `docs/upstream-pr/offline-catchup-sync.md` to follow `.github/PULL_REQUEST_TEMPLATE.md`, describe the dedicated automatic-progress cursor and migration trade-off, preserve the prior-art result, and report the Gradle results truthfully.
-- [ ] Update the catch-up section of `docs/upstream-pr/README.md` with the candidate's exact base SHA, head SHA, commit list, diffstat, tests, and the owner-only command using `--head ya-breeze:feat/offline-catchup-sync-upstream --base main`.
+- [x] Update `docs/upstream-pr/offline-catchup-sync.md` to follow `.github/PULL_REQUEST_TEMPLATE.md`, describe the dedicated automatic-progress cursor and migration trade-off, preserve the prior-art result, and report the Gradle results truthfully.
+- [x] Update the catch-up section of `docs/upstream-pr/README.md` with the candidate's exact base SHA, head SHA, commit list, diffstat, tests, and the owner-only command using `--head ya-breeze:feat/offline-catchup-sync-upstream --base main`.
 - [ ] Run the full Codex Review Gate against the pinned candidate diff and the associated handoff/spec scope, including correctness, standards, and spec/tests passes plus one independent Claude peer attempt when available; compare working-tree status before and after the peer review.
 - [ ] Verify every finding against the pinned diff, fix all valid findings, rerun affected Gradle checks, refresh the recorded SHA and docs, and repeat the native gate until no unaddressed finding remains; record the independent review as reviewed or peer unavailable without treating an unavailable peer as a native-review substitute.
 - [ ] Mark completed
