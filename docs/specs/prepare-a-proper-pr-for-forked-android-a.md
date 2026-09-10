@@ -30,22 +30,22 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Rebuild the candidate on the live upstream baseline
 
-- [ ] Fetch `origin` and `upstream`, resolve their branch tips, and record the current `upstream/main`, `origin/feat/offline-catchup-sync-upstream`, and local `feat/offline-catchup-sync-upstream` SHAs rather than trusting the stale handoff values.
-- [ ] Recreate the catch-up candidate from the fetched `upstream/main`, carrying forward the valid behavior from the two-commit remote history ending at `e06ee92` while preserving the single `SyncManager` companion object and the removal of the unrelated `NoMatchingData` per-type cursor advancement.
-- [ ] Resolve `SyncManager.kt` against upstream's `WebhookDeliveryFormat.JSON` and `WebhookDeliveryFormat.GRPC` branches so catch-up slices use the same current delivery, filtering, payload-building, retry, and logging behavior as ordinary syncs.
-- [ ] Preserve the existing `SyncWorker.kt` and `SyncForegroundService.kt` automatic entry points, `HealthConnectManager.LOOKBACK_HOURS` coupling, 48-hour threshold, 24-hour slicing, 30-day clamp, and rate-limit paths.
-- [ ] Keep the upstream-ready history small and conventional, with a complete buildable `feat:` commit followed by its JUnit test commit; do not retain a corrective commit whose parent fails to compile.
-- [ ] Mark completed
+- [x] Fetch `origin` and `upstream`, resolve their branch tips, and record the current `upstream/main`, `origin/feat/offline-catchup-sync-upstream`, and local `feat/offline-catchup-sync-upstream` SHAs rather than trusting the stale handoff values.
+- [x] Recreate the catch-up candidate from the fetched `upstream/main`, carrying forward the valid behavior from the two-commit remote history ending at `e06ee92` while preserving the single `SyncManager` companion object and the removal of the unrelated `NoMatchingData` per-type cursor advancement.
+- [x] Resolve `SyncManager.kt` against upstream's `WebhookDeliveryFormat.JSON` and `WebhookDeliveryFormat.GRPC` branches so catch-up slices use the same current delivery, filtering, payload-building, retry, and logging behavior as ordinary syncs.
+- [x] Preserve the existing `SyncWorker.kt` and `SyncForegroundService.kt` automatic entry points, `HealthConnectManager.LOOKBACK_HOURS` coupling, 48-hour threshold, 24-hour slicing, 30-day clamp, and rate-limit paths.
+- [x] Keep the upstream-ready history small and conventional, with a complete buildable `feat:` commit followed by its JUnit test commit; do not retain a corrective commit whose parent fails to compile.
+- [x] Mark completed
 
 ### Task 2: Isolate scheduled catch-up progress
 
-- [ ] Add a dedicated automatic/scheduled-sync progress key plus nullable-long getter and setter to `app/src/main/java/com/hcwebhook/app/PreferencesManager.kt`, matching the surrounding `KEY_LAST_SYNC_TIME`, `getLastSyncTime`, and `setLastSyncTime` conventions without changing their existing UI/API meaning.
-- [ ] Change `SyncManager.performSyncWithCatchUp` to resolve replay from the dedicated cursor, using the legacy general timestamp only as a one-time seed when the new key is absent and persisting that seed independently.
-- [ ] On the normal no-catch-up path, update automatic progress only after `performSync` returns success; on the replay path, checkpoint it after each successful slice and leave it unchanged for the failed slice and all later slices.
-- [ ] Keep manual calls from `ManualSyncCard.kt` and API calls from `LocalTcpServerManager.handleSyncRequest` on `performSync`, so they may update `KEY_LAST_SYNC_TIME` and per-type record cursors but cannot move the new automatic progress cursor.
-- [ ] Preserve useful last-sync UI and local API reporting: normal automatic sync may continue updating the general timestamp through `performSync`, while a completed replay updates the general timestamp once without using it as future catch-up state.
-- [ ] Update comments and the descriptions in `README.md`, `docs/webhook.md`, and `docs/local-http.md` to distinguish automatic catch-up progress from manual/API last-sync activity.
-- [ ] Mark completed
+- [x] Add a dedicated automatic/scheduled-sync progress key plus nullable-long getter and setter to `app/src/main/java/com/hcwebhook/app/PreferencesManager.kt`, matching the surrounding `KEY_LAST_SYNC_TIME`, `getLastSyncTime`, and `setLastSyncTime` conventions without changing their existing UI/API meaning.
+- [x] Change `SyncManager.performSyncWithCatchUp` to resolve replay from the dedicated cursor, using the legacy general timestamp only as a one-time seed when the new key is absent and persisting that seed independently.
+- [x] On the normal no-catch-up path, update automatic progress only after `performSync` returns success; on the replay path, checkpoint it after each successful slice and leave it unchanged for the failed slice and all later slices.
+- [x] Keep manual calls from `ManualSyncCard.kt` and API calls from `LocalTcpServerManager.handleSyncRequest` on `performSync`, so they may update `KEY_LAST_SYNC_TIME` and per-type record cursors but cannot move the new automatic progress cursor.
+- [x] Preserve useful last-sync UI and local API reporting: normal automatic sync may continue updating the general timestamp through `performSync`, while a completed replay updates the general timestamp once without using it as future catch-up state.
+- [x] Update comments and the descriptions in `README.md`, `docs/webhook.md`, and `docs/local-http.md` to distinguish automatic catch-up progress from manual/API last-sync activity.
+- [x] Mark completed
 
 ### Task 3: Add regression coverage and run the real build gates
 
