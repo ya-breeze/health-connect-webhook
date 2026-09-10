@@ -6,10 +6,10 @@ Nothing has been written to `mcnaveen/health-connect-webhook`: no branch, pull r
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base: `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` (`upstream/main` when fetched)
-- Head: `def32a2216b05cca5687408e9c76a02fb1ccf5bf`
+- Head: `60ddded391c7dd0a39605a9e427b079e40853e9a`
 - Commits, oldest first:
-  - `94de8927778a1159a4653fe2ce1e18c825f68a24 feat: replay missed automatic sync data`
-  - `def32a2216b05cca5687408e9c76a02fb1ccf5bf test: cover automatic catch-up progress`
+  - `e0149bc0f263947b38e85704269bdeb6318f08b7 feat: replay missed automatic sync data`
+  - `60ddded391c7dd0a39605a9e427b079e40853e9a test: cover automatic catch-up progress`
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 
 Diffstat against the base:
@@ -33,9 +33,9 @@ Diffstat against the base:
  app/src/main/res/values-ta/strings.xml             |  16 +
  app/src/main/res/values-zh/strings.xml             |  16 +
  .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 390 +++++++++++++++++++++
- docs/local-http.md                                 |   5 +-
- docs/webhook.md                                    |   3 +
- 20 files changed, 767 insertions(+), 16 deletions(-)
+ docs/local-http.md                                 |   7 +-
+ docs/webhook.md                                    |   5 +-
+ 20 files changed, 769 insertions(+), 18 deletions(-)
 ```
 
 ## Validation and review
@@ -43,7 +43,7 @@ Diffstat against the base:
 - `./gradlew assembleDebug` — passed on the feature parent and candidate head.
 - `./gradlew test` — passed on the candidate head, including all four flavor/build-type unit-test variants.
 - `./gradlew lint` — passed on the candidate head. The fetched upstream base initially failed on 16 untranslated gRPC resource keys; the feature commit supplies those keys for all nine configured locales.
-- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing future-clock/read-boundary handling, manual/API per-type cursor suppression, partial multi-webhook checkpointing, and detached-helper test coverage found by native passes.
+- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing future-clock/read-boundary handling, manual/API per-type cursor suppression, partial multi-webhook checkpointing, detached-helper test coverage, and the final automatic-cursor documentation mismatch found by native passes.
 - Independent Claude peer — peer unavailable. The one clean-gate attempt initialized successfully but was rejected before review by the account's weekly rate limit; the candidate and handoff worktrees were unchanged before and after it.
 
 The upstream-ready diff excludes `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/`.
