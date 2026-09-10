@@ -6,10 +6,10 @@ Nothing has been written to `mcnaveen/health-connect-webhook`: no branch, pull r
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base: `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` (`upstream/main` when fetched)
-- Head: `404526c2dd2effe0ed4ce4c1460da21cd935abc7`
+- Head: `754389566f546c8c520852354cda3db55e57b47c`
 - Commits, oldest first:
-  - `6557a3f34950d6af26a312417474b073defffea5 feat: replay missed automatic sync data`
-  - `404526c2dd2effe0ed4ce4c1460da21cd935abc7 test: cover automatic catch-up progress`
+  - `84e0a532b7a43075bec0f9bb3eb344c5bf133a5b feat: replay missed automatic sync data`
+  - `754389566f546c8c520852354cda3db55e57b47c test: cover automatic catch-up progress`
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 
 Diffstat against the base:
@@ -30,10 +30,10 @@ Diffstat against the base:
  app/src/main/res/values-pt/strings.xml             |  16 ++
  app/src/main/res/values-ta/strings.xml             |  16 ++
  app/src/main/res/values-zh/strings.xml             |  16 ++
- .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 180 +++++++++++++++++++++
+ .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 191 +++++++++++++++++++++
  docs/local-http.md                                 |   5 +-
  docs/webhook.md                                    |   3 +
- 18 files changed, 473 insertions(+), 11 deletions(-)
+ 18 files changed, 484 insertions(+), 11 deletions(-)
 ```
 
 ## Validation and review
