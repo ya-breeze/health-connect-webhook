@@ -67,9 +67,9 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 5: Publish and prove the exact fork ref
 
-- [ ] Immediately before publishing, fetch the existing fork ref and update only `origin/feat/offline-catchup-sync-upstream`, using `--force-with-lease` if the rebuilt history requires replacement; do not push any ref to `upstream`.
-- [ ] Resolve `refs/heads/feat/offline-catchup-sync-upstream` from `origin` after the push and prove that its tip equals the exact SHA that passed Gradle and the final Review Gate, that its merge base equals the documented current upstream base, and that its commit list matches the reviewed history.
-- [ ] Recheck `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md` against the resolved remote ref, leaving no old `777ff1d`, `0032356`, or `e06ee92` claim unless it is explicitly identified as historical context.
-- [ ] Remove the obsolete mock-payload command from the ready-to-run handoff and state that current upstream already emits integer `measurement_location`; leave detailed cleanup of that separate submission to the deferred follow-up.
-- [ ] State plainly that all three Gradle commands and the native Review Gate passed, report the independent peer status, and confirm that nothing was opened, merged, pushed, or commented on in `mcnaveen/health-connect-webhook`.
-- [ ] Mark completed
+- [x] Immediately before publishing, fetch the existing fork ref and update only `origin/feat/offline-catchup-sync-upstream`, using `--force-with-lease` if the rebuilt history requires replacement; do not push any ref to `upstream`.
+- [x] Resolve `refs/heads/feat/offline-catchup-sync-upstream` from `origin` after the push and prove that its tip equals the exact SHA that passed Gradle and the final Review Gate, that its merge base equals the documented current upstream base, and that its commit list matches the reviewed history.
+- [x] Recheck `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md` against the resolved remote ref, leaving no old `777ff1d`, `0032356`, or `e06ee92` claim unless it is explicitly identified as historical context.
+- [x] Remove the obsolete mock-payload command from the ready-to-run handoff and state that current upstream already emits integer `measurement_location`; leave detailed cleanup of that separate submission to the deferred follow-up.
+- [x] State plainly that all three Gradle commands and the native Review Gate passed, report the independent peer status, and confirm that nothing was opened, merged, pushed, or commented on in `mcnaveen/health-connect-webhook`.
+- [x] Mark completed
