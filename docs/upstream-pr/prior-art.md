@@ -1,6 +1,6 @@
 # Prior art: has upstream already considered this?
 
-No maintainer rejection was found for either submission. Both searches below returned either
+No maintainer rejection was found for the catch-up submission. The searches below returned either
 nothing on point, or hits that turned out to be a different feature entirely.
 
 ## Catch-up / offline sync
@@ -12,12 +12,12 @@ of the following terms, including PRs in the results:
 |---|---|---|
 | `catch-up` | none | No hit. |
 | `catchup` | none | No hit. |
-| `backfill` | #69 "[Feature] ProtoBuf/gRPC support" (open) | Not related. `backfill` appears once, in the issue's "Impact" line ("Users wishing to backfill past data into an external service..."), about payload transport efficiency (JSON size vs. protobuf), not about recovering missed syncs. |
+| `backfill` | #69 "[Feature] ProtoBuf/gRPC support" (closed) | Not related. `backfill` appears once, in the issue's "Impact" line ("Users wishing to backfill past data into an external service..."), about payload transport efficiency (JSON size vs. protobuf), not about recovering missed syncs. |
 | `offline` | none | No hit. |
 | `missed data` | none | No hit. |
 | `48 hour` | #48 "feat: configurable resolution for steps and heart rate" (merged) | Not related — matched on an unrelated mention of a time value, not the lookback window. |
 | `48h` | none | No hit. |
-| `lookback` | none | No hit. |
+| `lookback` | #74 "fix(http-server): label oldest daily bucket with real window start" (merged) | Not related. Its pull-request body uses “lookback window” while correcting the timestamp label on a partial daily aggregate; it does not replay missed automatic syncs. |
 | `history` | #44, #43, #52, #34, #6, #5, #15 | See below — closest is #6, still not the same feature. |
 | `READ_HEALTH_DATA_HISTORY` | #44, #43, #6 | Same set as above. |
 
@@ -41,19 +41,7 @@ redaction).
 
 **Verdict: no prior rejection found.** Nothing to answer or work around in the pull request body.
 
-## Mock payload `measurement_location` mismatch
-
-Searched for `measurement_location` and `mock payload`:
-
-| Search term | Hits | Verdict |
-|---|---|---|
-| `measurement_location` | #25 "Add support for SkinTemperatureRecord" (closed, merged the feature) | Not the same bug. #25 is the original feature request that introduced `measurement_location` to the payload; it does not mention the mock endpoint or the string/int mismatch. It does confirm the field is documented as coming from Health Connect's integer `measurementLocation`, corroborating that the mock's string value is wrong. |
-| `mock payload` | #65, #62 (both merged feature PRs) | Not related — matched on unrelated payload-field additions, no mention of the mock endpoint. |
-
-**Verdict: no existing report found.** The mock payload bug fix in this batch does not duplicate
-an open or closed issue/PR.
-
-## Why the other two side commits are not going upstream
+## Why the remaining side commits are not going upstream
 
 **`299e41e0` (dependency bump: Kotlin 2.1.21, Compose BOM 2025.09.01.00).** A version bump like
 this belongs to the maintainer's own release cadence — they choose when to move the whole

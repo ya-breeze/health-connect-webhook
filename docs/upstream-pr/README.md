@@ -6,10 +6,10 @@ Nothing has been written to `mcnaveen/health-connect-webhook`: no branch, pull r
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base: `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` (`upstream/main` when fetched)
-- Head: `754389566f546c8c520852354cda3db55e57b47c`
+- Head: `def32a2216b05cca5687408e9c76a02fb1ccf5bf`
 - Commits, oldest first:
-  - `84e0a532b7a43075bec0f9bb3eb344c5bf133a5b feat: replay missed automatic sync data`
-  - `754389566f546c8c520852354cda3db55e57b47c test: cover automatic catch-up progress`
+  - `94de8927778a1159a4653fe2ce1e18c825f68a24 feat: replay missed automatic sync data`
+  - `def32a2216b05cca5687408e9c76a02fb1ccf5bf test: cover automatic catch-up progress`
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 
 Diffstat against the base:
@@ -17,23 +17,25 @@ Diffstat against the base:
 ```text
  README.md                                          |   5 +
  .../java/com/hcwebhook/app/HealthConnectManager.kt |   2 +-
+ .../com/hcwebhook/app/LocalTcpServerManager.kt     |   6 +-
  .../java/com/hcwebhook/app/PreferencesManager.kt   |  12 +-
  .../com/hcwebhook/app/SyncForegroundService.kt     |   6 +-
- app/src/main/java/com/hcwebhook/app/SyncManager.kt | 125 +++++++++++++-
+ app/src/main/java/com/hcwebhook/app/SyncManager.kt | 193 +++++++++-
  app/src/main/java/com/hcwebhook/app/SyncWorker.kt  |   2 +-
- app/src/main/res/values-de/strings.xml             |  16 ++
- app/src/main/res/values-es/strings.xml             |  16 ++
- app/src/main/res/values-fr/strings.xml             |  16 ++
- app/src/main/res/values-it/strings.xml             |  16 ++
- app/src/main/res/values-ja/strings.xml             |  16 ++
- app/src/main/res/values-ko/strings.xml             |  16 ++
- app/src/main/res/values-pt/strings.xml             |  16 ++
- app/src/main/res/values-ta/strings.xml             |  16 ++
- app/src/main/res/values-zh/strings.xml             |  16 ++
- .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 191 +++++++++++++++++++++
+ .../com/hcwebhook/app/components/ManualSyncCard.kt |  15 +-
+ app/src/main/res/values-de/strings.xml             |  16 +
+ app/src/main/res/values-es/strings.xml             |  16 +
+ app/src/main/res/values-fr/strings.xml             |  16 +
+ app/src/main/res/values-it/strings.xml             |  16 +
+ app/src/main/res/values-ja/strings.xml             |  16 +
+ app/src/main/res/values-ko/strings.xml             |  16 +
+ app/src/main/res/values-pt/strings.xml             |  16 +
+ app/src/main/res/values-ta/strings.xml             |  16 +
+ app/src/main/res/values-zh/strings.xml             |  16 +
+ .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 390 +++++++++++++++++++++
  docs/local-http.md                                 |   5 +-
  docs/webhook.md                                    |   3 +
- 18 files changed, 484 insertions(+), 11 deletions(-)
+ 20 files changed, 767 insertions(+), 16 deletions(-)
 ```
 
 ## Validation and review
@@ -41,7 +43,7 @@ Diffstat against the base:
 - `./gradlew assembleDebug` — passed on the feature parent and candidate head.
 - `./gradlew test` — passed on the candidate head, including all four flavor/build-type unit-test variants.
 - `./gradlew lint` — passed on the candidate head. The fetched upstream base initially failed on 16 untranslated gRPC resource keys; the feature commit supplies those keys for all nine configured locales.
-- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing a future-clock cursor regression found by the first native pass.
+- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing future-clock/read-boundary handling, manual/API per-type cursor suppression, partial multi-webhook checkpointing, and detached-helper test coverage found by native passes.
 - Independent Claude peer — peer unavailable. The one clean-gate attempt initialized successfully but was rejected before review by the account's weekly rate limit; the candidate and handoff worktrees were unchanged before and after it.
 
 The upstream-ready diff excludes `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/`.
@@ -58,7 +60,7 @@ gh pr create --repo mcnaveen/health-connect-webhook \
 
 ## Obsolete mock-payload submission
 
-Do not open the previous mock-payload pull request. Current upstream already emits integer `measurement_location` values from `MockPayloadBuilder.kt`, matching `SyncManager.kt`, `docs/webhook.md`, and the current payload contract. The old ready-to-run command has been removed; cleanup of its separate fork branch/artifacts remains deferred.
+Do not open the previous mock-payload pull request. Current upstream already emits integer `measurement_location` values from `MockPayloadBuilder.kt`, matching `SyncManager.kt`, `docs/webhook.md`, and the current payload contract. The obsolete pull-request body and ready-to-run command have been removed; cleanup of its separate fork branch remains deferred.
 
 ## Excluded fork-only work
 
