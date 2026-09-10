@@ -49,10 +49,10 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 3: Add regression coverage and run the real build gates
 
-- [ ] Extend `app/src/test/java/com/hcwebhook/app/SyncManagerCatchUpTest.kt` using its existing JUnit 4 style, extracting a small pure watermark-selection helper if needed to test preference selection without Android framework mocks.
-- [ ] Add a regression case in which an old stored automatic cursor wins over a newer general timestamp representing a successful one-day manual sync, and cover the equivalent API behavior through the same state boundary.
-- [ ] Cover first-use migration from the legacy timestamp, absence of both timestamps, successful normal-run initialization, successful per-slice checkpointing, and failure leaving automatic progress at the last completed boundary.
-- [ ] Retain the existing threshold, future-watermark, slice-contiguity, final-boundary, and 30-day-clamp cases.
+- [x] Extend `app/src/test/java/com/hcwebhook/app/SyncManagerCatchUpTest.kt` using its existing JUnit 4 style, extracting a small pure watermark-selection helper if needed to test preference selection without Android framework mocks.
+- [x] Add a regression case in which an old stored automatic cursor wins over a newer general timestamp representing a successful one-day manual sync, and cover the equivalent API behavior through the same state boundary.
+- [x] Cover first-use migration from the legacy timestamp, absence of both timestamps, successful normal-run initialization, successful per-slice checkpointing, and failure leaving automatic progress at the last completed boundary.
+- [x] Retain the existing threshold, future-watermark, slice-contiguity, final-boundary, and 30-day-clamp cases.
 - [ ] Run `./gradlew assembleDebug` on the feature commit so every retained commit is buildable, then run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the final candidate head; fix failures rather than substituting static inspection or an untested handoff disclaimer.
 - [ ] Mark completed
 
