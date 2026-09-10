@@ -41,8 +41,8 @@ Diffstat against the base:
 - `./gradlew assembleDebug` — passed on the feature parent and candidate head.
 - `./gradlew test` — passed on the candidate head, including all four flavor/build-type unit-test variants.
 - `./gradlew lint` — passed on the candidate head. The fetched upstream base initially failed on 16 untranslated gRPC resource keys; the feature commit supplies those keys for all nine configured locales.
-- Codex Review Gate — pending final pinned review.
-- Independent Claude peer — pending one review attempt.
+- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing a future-clock cursor regression found by the first native pass.
+- Independent Claude peer — peer unavailable. The one clean-gate attempt initialized successfully but was rejected before review by the account's weekly rate limit; the candidate and handoff worktrees were unchanged before and after it.
 
 The upstream-ready diff excludes `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/`.
 
