@@ -44,12 +44,12 @@ The fork handoff searched upstream issues and pull requests for `catch-up`, `cat
 
 ### Validation
 
-Passed on `60ddded391c7dd0a39605a9e427b079e40853e9a`:
+Passed on `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`:
 
 - `./gradlew assembleDebug`
 - `./gradlew test`
 - `./gradlew lint`
-- `./gradlew assembleDebug` also passed independently on the retained feature parent `e0149bc0f263947b38e85704269bdeb6318f08b7`.
-- The native Codex Review Gate passed for correctness, conventions, and spec/test fidelity after correcting the normal automatic-cursor documentation. The independent Claude peer was unavailable because its weekly quota rejected the attempt before review.
+- `./gradlew assembleDebug` also passed independently on the retained feature parent `ed64b00f700277b2f5004a9ecae993ced06d6575`.
+- The native Codex Review Gate passed for correctness, conventions, and spec/test fidelity after correcting the missing/future automatic-cursor fallback and the normal automatic-cursor documentation. The independent Claude peer was unavailable because its weekly quota rejected the attempt before review.
 
 Created by Codex
