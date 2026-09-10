@@ -1,84 +1,56 @@
-# Correct and republish the upstream catch-up sync branch
-Idea: ya-breeze/idea-forge#183
+# Repair automatic catch-up data integrity
+Idea: ya-breeze/idea-forge#419
 
 ## Why
 
-The existing upstream handoff is not ready to ship. `docs/upstream-pr/README.md` identifies `777ff1d6ede736a982506e220635f96d78767cc5` as the catch-up branch base and `e06ee928bc1b52340f252bf81d670607a1d0daae` as its head, but the local `feat/offline-catchup-sync-upstream` branch still points at the older four-commit history ending at `0032356`, while the fork-tracking ref points at the documented two-commit history. Review and handoff must refer to one identical, remotely verifiable commit. In addition, upstream `main` has advanced to `6a65d67` through the Protobuf/gRPC work, six commits beyond the documented base, so the candidate must be rebuilt on the current fetched upstream tip and preserve the new JSON and gRPC delivery paths in `SyncManager.performSync`.
+The upstream-ready catch-up candidate at `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` preserves useful work from the earlier idea, including the dedicated `last_automatic_sync_time` preference, bounded replay slices, automatic entry points, and JUnit coverage. It is not safe to ship yet. On a normal automatic run, `SyncManager.automaticSyncRequest` leaves `updateLastSyncTime` enabled, so `performSync` can persist the later general timestamp before `runAutomaticSync` persists its captured automatic boundary. A process death between those writes can make a fresh install seed the missing automatic cursor from the later timestamp and skip records.
 
-The catch-up implementation also has a data-loss defect. `SyncManager.performSyncWithCatchUp` currently plans replay from `PreferencesManager.getLastSyncTime()` and checkpoints progress through `setLastSyncTime()`. That same preference is updated by ordinary `performSync` calls, including the manual paths in `components/ManualSyncCard.kt` and the local API path in `LocalTcpServerManager.handleSyncRequest`. A successful one-day manual or API sync can therefore replace an older automatic-delivery watermark; the next `SyncWorker` or `SyncForegroundService` run sees only a short gap and never replays the missed scheduled-delivery period. This must be corrected before an upstream pull request is offered because it defeats the feature's central guarantee.
+Automatic reads also start exactly at the committed automatic cursor. Health Connect records imported late or backdated to a measurement time before that boundary can therefore remain permanently outside later reads. Finally, `performSync` aggregates per-webhook results in its production loop, but `SyncManagerCatchUpTest` exercises mixed success and failure only through the detached `webhookBatchSucceeded` Boolean helper. The test does not prove that one successful destination plus one failed destination returns failure through the real delivery path or prevents automatic progress.
 
-The existing investigation and most of the feature remain valid: catch-up should still use bounded slices, upstream's retry and pagination throttling, the single `SyncManager` companion object, and the existing automatic entry points. The unrelated `NoMatchingData` cursor update must remain excluded. Current upstream has independently removed the need for the proposed mock-payload pull request: `MockPayloadBuilder.kt` now emits integer `measurementLocation` values, matching `SyncManager.kt` and `docs/webhook.md`. The catch-up correction is therefore the first coherent submission to finish.
+These defects invalidate the passed Review Gate claims in `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md`. They must be corrected before the separate Android service lifecycle issue and final upstream handoff are completed.
 
 ## How
 
-Rebuild `feat/offline-catchup-sync-upstream` directly on the current fetched `upstream/main`, preserving the reviewed catch-up behavior and documentation while resolving against upstream's newer Protobuf/gRPC implementation. Keep a compact upstream-facing history in which every commit is buildable. The branch must contain only the catch-up feature, its tests and documentation, plus the missing translations for upstream's existing gRPC strings that are required to make the specified lint gate pass on this base. Dependency upgrades, cleartext-network policy, mock-payload changes, idea-forge specs, and `docs/upstream-pr/` artifacts remain outside its diff.
+Preserve the candidate’s valid catch-up implementation and its `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` upstream base while correcting the automatic data path. Automatic orchestration, rather than `performSync`, will own both cursor writes: after a successful normal run it will persist the captured automatic boundary first and the general completion timestamp second. Failed work will advance neither value, apart from the existing one-time legacy seed, which must still be stored before delivery starts. Replay will continue checkpointing each successful slice before updating the general timestamp after the complete replay.
 
-Separate automatic catch-up progress from the general last-sync timestamp. Add a dedicated `SharedPreferences` key and paired getter/setter in `PreferencesManager.kt`, following its existing `KEY_…`, nullable-long getter, and setter conventions. `KEY_LAST_SYNC_TIME` remains the user-facing timestamp consumed by `ConfigurationScreen` and the local `/stats` and `/health` responses. `performSyncWithCatchUp` must plan exclusively from the dedicated automatic-sync cursor once it exists. For compatibility, a missing new cursor may be seeded once from the legacy general timestamp; persist that seed before later manual or API activity can affect planning. A normal automatic run reads from the dedicated cursor rather than the per-type cursors that manual/API calls also advance, then advances the dedicated cursor to its captured read boundary only after `performSync` succeeds, so neither manual activity nor a record created while the sync is finishing can hide data from automatic delivery. During a replay, advance it to each successfully completed slice boundary so interruption resumes from that boundary, never advance it for a failed slice, and update the general display timestamp only after the overall automatic operation succeeds. An automatic unit is successful only if every attempted webhook delivery succeeds; partial delivery must retry rather than advancing shared progress past a failed destination. Manual and API calls continue updating the general timestamp and per-type cursors through `performSync`, but must never write the automatic catch-up cursor.
+Use a bounded 24-hour overlap, matching the existing slice size, for automatic reads with an established cursor. Clamp the overlapped start to the existing 30-day catch-up horizon while continuing to commit the non-overlapped boundary. This provides a documented guarantee for records ingested or modified within one overlap window; older backdating remains outside the automatic guarantee and can be recovered with an explicit-range sync. Delivery remains at-least-once. Complete JSON parity with the existing Protobuf identity fields so receivers can deduplicate raw records by Health Connect `metadata.id` and version or modification time; resolution-generated aggregates must be documented as upserts keyed by data type and deterministic bucket time. Client-side exactly-once storage and unbounded historical scanning are deliberately excluded because the existing webhook protocol cannot make atomic acknowledgements across multiple destinations.
 
-Retain the existing 48-hour threshold, 24-hour slices, 30-day cap, explicit-range reads, inter-slice delay, and upstream retry/throttle paths unless review demonstrates a correctness problem. Update `README.md`, `docs/webhook.md`, and `docs/local-http.md` so they describe the dedicated last successful automatic-sync progress rather than the ambiguous last successful sync. Preserve the prior-art conclusion for catch-up, but remove stale claims that the branch could not be compiled or tested.
+Refactor the current webhook loop only enough to expose the production aggregation path to JVM tests. Preserve per-webhook filters, JSON and gRPC payload construction, retry behavior, logs, and aggregated notifications. A mixed batch with `requireAllWebhookDeliveries` must return the real failure from this coordinator, and `runAutomaticSync` must observe that failure without moving either automatic or general progress.
 
-Run the real Gradle checks and the complete Codex Review Gate against a pinned candidate SHA before publishing it. The native review must cover correctness, repository conventions, and specification/test fidelity; request the independent Claude review once when available, record `peer unavailable` with its reason if it cannot complete, and fix every verified finding before rerunning affected checks and review. Only the clean, tested SHA may be pushed to the fork. Use `--force-with-lease` if updating the existing fork branch requires history replacement, then resolve the remote ref again and make the handoff SHA, base SHA, diffstat, and owner-run `gh pr create` command match it exactly.
+This split deliberately excludes `SyncForegroundService` duplicate-start coalescing and the final reviewed/published handoff. Those form a separate Android lifecycle and release-integrity review surface and must use the candidate produced here as groundwork. This part must not create, comment on, or merge anything in `mcnaveen/health-connect-webhook`. The owner alone may later run the documented command that opens the upstream pull request.
 
-No task may push to, open a pull request on, comment on, or merge anything in `mcnaveen/health-connect-webhook`. The owner alone may run the documented upstream pull-request command after reviewing the result. The obsolete mock-payload submission is not bundled into this branch; its remaining fork artifacts are handled separately so they cannot distract from or block review of the catch-up fix.
+### Task 1: Make automatic cursor persistence crash-safe
 
-## Validation Commands
+- [ ] Start from the local `feat/offline-catchup-sync-upstream` candidate at `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`, preserving its upstream base, valid feature behavior, compact history, and exclusion of idea-forge handoff artifacts from the upstream-ready diff.
+- [ ] Change `SyncManager.automaticSyncRequest` and `performSyncWithCatchUp` so normal and replay automatic calls invoke `performSync` with general timestamp updates disabled; manual and local API callers must retain their existing `performSync` behavior.
+- [ ] Update `SyncManager.runAutomaticSync` so successful normal work persists the captured automatic boundary before obtaining and persisting the general completion timestamp, while failures persist neither value and the legacy seed remains the first write when migration is required.
+- [ ] Preserve replay semantics: checkpoint every successful slice, stop without advancing the failed slice, and write the general timestamp only after all slices succeed.
+- [ ] Extend `SyncManagerCatchUpTest.kt` with ordered event assertions covering a fresh install, a legacy-seeded install, successful normal delivery, normal failure, completed replay, and replay failure; explicitly prove that no execution writes the general timestamp before its automatic boundary.
+- [ ] Mark completed
 
-- `./gradlew assembleDebug`
-- `./gradlew test`
-- `./gradlew lint`
+### Task 2: Recover bounded late ingestion without moving progress backward
 
-## Ground rules
-This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
+- [ ] Add a named 24-hour automatic overlap beside `GAP_THRESHOLD_HOURS`, `SLICE_HOURS`, and `MAX_CATCHUP_DAYS`, and centralize calculation of an automatic request’s effective read start.
+- [ ] Apply the overlap to normal automatic reads and replay slices that have a committed start, clamp it to the existing 30-day horizon, and continue checkpointing the original slice or run boundary rather than the overlapped start.
+- [ ] Keep first-use behavior unchanged when neither automatic nor legacy progress exists, and keep explicit manual/API ranges and per-type cursors outside the overlap policy.
+- [ ] Extend `putRecordMetadata` in `SyncManager.kt` to serialize the stable identity, version, modification-time, and applicable zone-offset fields already carried by `RecordMetadata`, matching the existing Protobuf representation and field names documented in `docs/webhook.md`.
+- [ ] Add orchestration regressions showing that a record timestamped before the committed cursor but within the overlap is inside the next automatic request, that the cursor still advances only to the captured boundary after success, and that the overlap never reads before the 30-day cap.
+- [ ] Update `README.md`, `docs/webhook.md`, and `docs/local-http.md` with the bounded late-ingestion guarantee, at-least-once delivery trade-off, raw-record deduplication keys, aggregate upsert key, and explicit-range recovery for older backdated data.
+- [ ] Mark completed
 
-Tick the boxes in this file as the work is completed; they are the record of progress, and the pipeline reads them to decide whether the change is finished.
+### Task 3: Test partial delivery through the production aggregation path
 
-Out of scope, deliberately: do NOT mark the pull request ready for review and do NOT call a forge merge API. Implementation marks the pull request ready only after the task list is complete. Afterward Completion may ask the Store to perform Automatic Merge only when the planner and final implementation agent authorized the exact result. Leave the pull request in a state worth reading.
+- [ ] Extract the per-webhook delivery aggregation currently embedded in `SyncManager.performSync` into an internal production coordinator with injectable delivery calls, and have `performSync` use that coordinator rather than duplicating its decision logic.
+- [ ] Preserve enabled-webhook selection, data-type filtering, JSON and gRPC branches, payload-size handling, failure selection, webhook logging, and notification aggregation while representing attempted successes and failures in one production result.
+- [ ] Make `requireAllWebhookDeliveries = true` return failure when any attempted destination fails even if another succeeds; retain the existing any-success behavior for manual/API calls that pass `false`.
+- [ ] Replace reliance on the detached `webhookBatchSucceeded` test with coverage that sends one success and one failure through the coordinator used by `performSync`, feeds that result through `runAutomaticSync`, and proves neither automatic nor general progress advances.
+- [ ] Cover all-success, all-failure, no-matching-data, JSON/gRPC, and filtered-webhook cases sufficiently to show the refactor preserved existing delivery behavior.
+- [ ] Mark completed
 
-### Task 1: Rebuild the candidate on the live upstream baseline
+### Task 4: Leave an honest, buildable intermediate candidate
 
-- [x] Fetch `origin` and `upstream`, resolve their branch tips, and record the current `upstream/main`, `origin/feat/offline-catchup-sync-upstream`, and local `feat/offline-catchup-sync-upstream` SHAs rather than trusting the stale handoff values.
-- [x] Recreate the catch-up candidate from the fetched `upstream/main`, carrying forward the valid behavior from the two-commit remote history ending at `e06ee92` while preserving the single `SyncManager` companion object and the removal of the unrelated `NoMatchingData` per-type cursor advancement.
-- [x] Resolve `SyncManager.kt` against upstream's `WebhookDeliveryFormat.JSON` and `WebhookDeliveryFormat.GRPC` branches so catch-up slices use the same current delivery, filtering, payload-building, retry, and logging behavior as ordinary syncs.
-- [x] Preserve the existing `SyncWorker.kt` and `SyncForegroundService.kt` automatic entry points, `HealthConnectManager.LOOKBACK_HOURS` coupling, 48-hour threshold, 24-hour slicing, 30-day clamp, and rate-limit paths.
-- [x] Keep the upstream-ready history small and conventional, with a complete buildable `feat:` commit followed by its JUnit test commit; do not retain a corrective commit whose parent fails to compile.
-- [x] Mark completed
-
-### Task 2: Isolate scheduled catch-up progress
-
-- [x] Add a dedicated automatic/scheduled-sync progress key plus nullable-long getter and setter to `app/src/main/java/com/hcwebhook/app/PreferencesManager.kt`, matching the surrounding `KEY_LAST_SYNC_TIME`, `getLastSyncTime`, and `setLastSyncTime` conventions without changing their existing UI/API meaning.
-- [x] Change `SyncManager.performSyncWithCatchUp` to resolve replay from the dedicated cursor, using the legacy general timestamp only as a one-time seed when the new key is absent and persisting that seed independently.
-- [x] On the normal no-catch-up path, update automatic progress only after `performSync` returns success; on the replay path, checkpoint it after each successful slice and leave it unchanged for the failed slice and all later slices.
-- [x] Treat automatic delivery as successful only when every attempted webhook succeeds, and checkpoint a normal run at its captured read boundary rather than after completion.
-- [x] Make normal automatic reads start from the dedicated automatic cursor so manual/API per-type cursor updates cannot suppress delivery before the catch-up threshold.
-- [x] Keep manual calls from `ManualSyncCard.kt` and API calls from `LocalTcpServerManager.handleSyncRequest` on `performSync`, so they may update `KEY_LAST_SYNC_TIME` and per-type record cursors but cannot move the new automatic progress cursor.
-- [x] Preserve useful last-sync UI and local API reporting: normal automatic sync may continue updating the general timestamp through `performSync`, while a completed replay updates the general timestamp once without using it as future catch-up state.
-- [x] Update comments and the descriptions in `README.md`, `docs/webhook.md`, and `docs/local-http.md` to distinguish automatic catch-up progress from manual/API last-sync activity.
-- [x] Mark completed
-
-### Task 3: Add regression coverage and run the real build gates
-
-- [x] Extend `app/src/test/java/com/hcwebhook/app/SyncManagerCatchUpTest.kt` using its existing JUnit 4 style, extracting a small pure watermark-selection helper if needed to test preference selection without Android framework mocks.
-- [x] Add a regression case in which an old stored automatic cursor wins over a newer general timestamp representing a successful one-day manual sync, and cover the equivalent API behavior through the same state boundary.
-- [x] Cover first-use migration from the legacy timestamp, absence of both timestamps, successful normal-run initialization, successful per-slice checkpointing, and failure leaving automatic progress at the last completed boundary through the orchestration used by `performSyncWithCatchUp`, not detached decision helpers alone.
-- [x] Retain the existing threshold, future-watermark, slice-contiguity, final-boundary, and 30-day-clamp cases.
-- [x] Supply the missing translations for upstream's existing gRPC strings in all nine configured non-default locales so the specified lint gate can run cleanly on the fetched base; do not include any other unrelated localization work.
-- [x] Run `./gradlew assembleDebug` on the feature commit so every retained commit is buildable, then run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the final candidate head; fix failures rather than substituting static inspection or an untested handoff disclaimer.
-- [x] Mark completed
-
-### Task 4: Review the complete candidate and refresh its handoff
-
-- [x] Verify the diff against the fetched `upstream/main` contains only the catch-up implementation, tests, related documentation, and the narrowly authorized gRPC translation lint repair; specifically exclude `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/` from the upstream-ready branch.
-- [x] Update `docs/upstream-pr/offline-catchup-sync.md` to follow `.github/PULL_REQUEST_TEMPLATE.md`, describe the dedicated automatic-progress cursor and migration trade-off, preserve the prior-art result, and report the Gradle results truthfully.
-- [x] Update the catch-up section of `docs/upstream-pr/README.md` with the candidate's exact base SHA, head SHA, commit list, diffstat, tests, and the owner-only command using `--head ya-breeze:feat/offline-catchup-sync-upstream --base main`.
-- [x] Run the full Codex Review Gate against the pinned candidate diff and the associated handoff/spec scope, including correctness, standards, and spec/tests passes plus one independent Claude peer attempt when available; compare working-tree status before and after the peer review.
-- [x] Verify every finding against the pinned diff, fix all valid findings, rerun affected Gradle checks, refresh the recorded SHA and docs, and repeat the native gate until no unaddressed finding remains; record the independent review as reviewed or peer unavailable without treating an unavailable peer as a native-review substitute.
-- [x] Mark completed
-
-### Task 5: Publish and prove the exact fork ref
-
-- [x] Immediately before publishing, fetch the existing fork ref and update only `origin/feat/offline-catchup-sync-upstream`, using `--force-with-lease` if the rebuilt history requires replacement; do not push any ref to `upstream`.
-- [x] Resolve `refs/heads/feat/offline-catchup-sync-upstream` from `origin` after the push and prove that its tip equals the exact SHA that passed Gradle and the final Review Gate, that its merge base equals the documented current upstream base, and that its commit list matches the reviewed history.
-- [x] Recheck `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md` against the resolved remote ref, leaving no old `777ff1d`, `0032356`, or `e06ee92` claim unless it is explicitly identified as historical context.
-- [x] Remove the obsolete mock-payload command from the ready-to-run handoff and state that current upstream already emits integer `measurement_location`; leave detailed cleanup of that separate submission to the deferred follow-up.
-- [x] State plainly that all three Gradle commands and the native Review Gate passed, report the independent peer status, and confirm that nothing was opened, merged, pushed, or commented on in `mcnaveen/health-connect-webhook`.
-- [x] Mark completed
+- [ ] Keep the upstream-ready diff limited to the catch-up implementation, its tests and user-facing documentation, the existing localization lint repair, and the JSON metadata parity required by overlap deduplication; do not include `docs/specs/`, `docs/upstream-pr/`, dependency upgrades, cleartext policy, or the deferred service lifecycle change.
+- [ ] Run the project’s existing assemble, unit-test, and lint checks against the corrected data-path candidate and fix regressions, retaining only buildable commits.
+- [ ] Commit the corrected data-path candidate locally for the deferred lifecycle work, but do not publish the intermediate ref or describe it as the final reviewed upstream candidate.
+- [ ] In `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md`, remove the stale passed-gate assertion and final-candidate status, reset review-dependent checklist claims, remove the empty `Closes #` placeholder, and state that lifecycle remediation and final review remain pending without inventing a replacement final SHA.
+- [ ] Mark completed
