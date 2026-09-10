@@ -53,8 +53,8 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 - [x] Add a regression case in which an old stored automatic cursor wins over a newer general timestamp representing a successful one-day manual sync, and cover the equivalent API behavior through the same state boundary.
 - [x] Cover first-use migration from the legacy timestamp, absence of both timestamps, successful normal-run initialization, successful per-slice checkpointing, and failure leaving automatic progress at the last completed boundary.
 - [x] Retain the existing threshold, future-watermark, slice-contiguity, final-boundary, and 30-day-clamp cases.
-- [ ] Run `./gradlew assembleDebug` on the feature commit so every retained commit is buildable, then run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the final candidate head; fix failures rather than substituting static inspection or an untested handoff disclaimer.
-- [ ] Mark completed
+- [x] Run `./gradlew assembleDebug` on the feature commit so every retained commit is buildable, then run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` on the final candidate head; fix failures rather than substituting static inspection or an untested handoff disclaimer.
+- [x] Mark completed
 
 ### Task 4: Review the complete candidate and refresh its handoff
 
