@@ -19,6 +19,13 @@ Refactor the current webhook loop only enough to expose the production aggregati
 
 This split deliberately excludes `SyncForegroundService` duplicate-start coalescing and the final reviewed/published handoff. Those form a separate Android lifecycle and release-integrity review surface and must use the candidate produced here as groundwork. This part must not create, comment on, or merge anything in `mcnaveen/health-connect-webhook`. The owner alone may later run the documented command that opens the upstream pull request.
 
+## Ground rules
+This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
+
+Tick the boxes in this file as the work is completed; they are the record of progress, and the pipeline reads them to decide whether the change is finished.
+
+Out of scope, deliberately: do NOT mark the pull request ready for review and do NOT call a forge merge API. Implementation marks the pull request ready only after the task list is complete. Afterward Completion may ask the Store to perform Automatic Merge only when the planner and final implementation agent authorized the exact result. Leave the pull request in a state worth reading.
+
 ### Task 1: Make automatic cursor persistence crash-safe
 
 - [ ] Start from the local `feat/offline-catchup-sync-upstream` candidate at `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`, preserving its upstream base, valid feature behavior, compact history, and exclusion of idea-forge handoff artifacts from the upstream-ready diff.
