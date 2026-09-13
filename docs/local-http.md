@@ -192,6 +192,9 @@ Request body is ignored.
 
 > **Note:** this request blocks until the sync and all webhook dispatches complete. Health Connect reads and outbound HTTP posts can take several seconds — configure your HTTP client timeout accordingly (10–30 s recommended).
 
+`POST /sync` updates the general last-sync time reported by `/stats` and `/health`,
+but does not move the dedicated interval/scheduled catch-up cursor.
+
 ---
 
 ### `GET /server-logs`
@@ -244,11 +247,13 @@ Entries are ordered newest-first. Note that calling `/server-logs` itself is rec
 | Aspect | Webhooks (POST) | Local HTTP (`GET /`) |
 |--------|------------------|------------------------|
 | Trigger | Interval / schedule / manual sync | Your client polls |
-| Time window (default) | Last **48 h** with **incremental** per-type watermarks | Last **48 h**, **full** read in window (no watermarks) |
+| Time window (default) | Manual/API: last **48 h** with incremental per-type watermarks. Interval/scheduled: dedicated automatic cursor to the captured read boundary, replaying gaps over 48 h in 24 h slices (up to 30 days), each read also overlapping 24 h before its cursor for bounded late-arriving records. | Last **48 h**, **full** read in window (no watermarks) |
 | `GET /?days=N` | N/A | **N** full days back from now |
 | JSON schema | [webhook.md](./webhook.md) | Same |
 
-`GET /` uses `SyncManager.getRealtimeJsonPayload`; `POST /sync` and background sync use `performSync` with incremental timestamps when no explicit range is passed.
+`GET /` uses `SyncManager.getRealtimeJsonPayload`. `POST /sync` uses `performSync` with per-type incremental timestamps when no explicit range is passed. Interval and scheduled background sync use `performSyncWithCatchUp`, which reads from the dedicated automatic cursor even when the gap is under 48 hours.
+
+Scheduled/interval sync's 24-hour overlap only recovers records ingested or modified within that window of the automatic cursor; see [webhook.md's deduplication and upsert keys](./webhook.md#deduplication-and-upsert-keys) for how receivers should handle the resulting at-least-once redelivery. Backdating older than the overlap needs an explicit `GET /?days=N` request (or a webhook's own explicit-range sync) to recover, since neither `GET /` nor `POST /sync`'s default window consults the automatic cursor.
 
 `GET /logs` returns outbound webhook dispatch logs (stored in `PreferencesManager`, persisted across restarts). `GET /server-logs` returns inbound HTTP request logs (in-memory only, cleared on server restart).
 

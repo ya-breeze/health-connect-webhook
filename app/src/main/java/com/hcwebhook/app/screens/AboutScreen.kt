@@ -2,19 +2,22 @@ package com.hcwebhook.app.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,18 +27,25 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hcwebhook.app.BuildConfig
 import com.hcwebhook.app.FlavorUtils
+import com.hcwebhook.app.PreferencesManager
 import com.hcwebhook.app.R
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.ChevronRight
 import com.hcwebhook.app.ui.theme.IconBackgroundBlue
 import com.hcwebhook.app.ui.theme.IconBackgroundGreen
+import com.hcwebhook.app.ui.theme.IconBackgroundPurple
 import com.hcwebhook.app.ui.theme.IconTintBlue
 import com.hcwebhook.app.ui.theme.IconTintGreen
+import com.hcwebhook.app.ui.theme.IconTintPurple
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AboutScreen(
     onRestartOnboarding: () -> Unit = {},
@@ -45,7 +55,11 @@ fun AboutScreen(
     onOpenChangelog: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val preferencesManager = remember { PreferencesManager(context) }
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showFeedbackSheet by remember { mutableStateOf(false) }
+    val feedbackSuccessMessage = stringResource(R.string.feedback_success)
 
     // ── Version info ──────────────────────────────────────────────────────────
     val versionName = try {
@@ -66,50 +80,7 @@ fun AboutScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(IconBackgroundBlue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = IconTintBlue,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.about_app_title),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(R.string.about_app_version, versionName, versionCode),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Description Card
+            // ── App identity ─────────────────────────────────────────────────
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -117,14 +88,63 @@ fun AboutScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(IconBackgroundBlue)
+                                .then(
+                                    if (BuildConfig.DEBUG) {
+                                        Modifier.combinedClickable(
+                                            onClick = {},
+                                            onLongClick = {
+                                                preferencesManager.debugForceWeeklyFeedbackPrompt()
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(R.string.feedback_weekly_debug_forced),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            },
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Info,
+                                contentDescription = null,
+                                tint = IconTintBlue,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = stringResource(R.string.about_app_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.about_app_version, versionName, versionCode),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = stringResource(R.string.about_app_desc),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
+            // ── App settings ─────────────────────────────────────────────────
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -132,6 +152,12 @@ fun AboutScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column {
+                    Text(
+                        text = stringResource(R.string.about_section_settings),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+                    )
                     LinkRow(
                         label = stringResource(R.string.about_local_http_title),
                         subtitle = stringResource(R.string.config_local_tcp_desc),
@@ -157,7 +183,102 @@ fun AboutScreen(
 
             LanguageSelectorCard()
 
-                        // Privacy & Security Card
+            // ── Feedback ─────────────────────────────────────────────────────
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showFeedbackSheet = true },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(IconBackgroundPurple),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Chat,
+                            contentDescription = null,
+                            tint = IconTintPurple,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.about_link_feedback),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.about_feedback_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Filled.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            // ── Help & resources ─────────────────────────────────────────────
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(R.string.about_links_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+                    )
+
+                    LinkRow(
+                        label = stringResource(R.string.about_link_changelog),
+                        subtitle = stringResource(R.string.about_link_changelog_desc),
+                        icon = Icons.AutoMirrored.Filled.Notes,
+                        onClick = { onOpenChangelog() }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                    LinkRow(
+                        label = stringResource(R.string.about_link_intro),
+                        icon = Icons.Filled.PlayArrow,
+                        onClick = { onRestartOnboarding() }
+                    )
+
+                    if (!FlavorUtils.isPlayStore) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        LinkRow(
+                            label = stringResource(R.string.about_link_github),
+                            icon = Icons.Filled.Code,
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/mcnaveen/health-connect-webhook"))
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // ── Privacy ──────────────────────────────────────────────────────
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -201,56 +322,51 @@ fun AboutScreen(
                 }
             }
 
+            // ── Medical disclaimer ───────────────────────────────────────────
             Card(
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.about_links_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
-                    )
-
-                    if (!FlavorUtils.isPlayStore) {
-                        LinkRow(
-                            label = stringResource(R.string.about_link_github),
-                            icon = Icons.Filled.Code,
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/mcnaveen/health-connect-webhook"))
-                                context.startActivity(intent)
-                            }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(24.dp)
                         )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
-
-                    LinkRow(
-                        label = "Provide Feedback",
-                        icon = Icons.AutoMirrored.Filled.OpenInNew,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://hc-webhook.feedbackjar.com/"))
-                            context.startActivity(intent)
-                        }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    LinkRow(
-                        label = stringResource(R.string.about_link_changelog),
-                        subtitle = stringResource(R.string.about_link_changelog_desc),
-                        icon = Icons.AutoMirrored.Filled.Notes,
-                        onClick = { onOpenChangelog() }
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    LinkRow(
-                        label = stringResource(R.string.about_link_intro),
-                        icon = Icons.Filled.PlayArrow,
-                        onClick = { onRestartOnboarding() }
-                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.medical_disclaimer_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.medical_disclaimer_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
             }
+
             Spacer(modifier = Modifier.height(80.dp)) // Bottom padding for nav bar
 
         }
@@ -259,6 +375,16 @@ fun AboutScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        FeedbackSheet(
+            visible = showFeedbackSheet,
+            onDismiss = { showFeedbackSheet = false },
+            onSubmitted = {
+                scope.launch {
+                    snackbarHostState.showSnackbar(feedbackSuccessMessage)
+                }
+            },
         )
     }
 }

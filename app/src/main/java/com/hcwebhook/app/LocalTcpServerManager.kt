@@ -268,7 +268,11 @@ object LocalHttpServerManager {
 
     private suspend fun handleSyncRequest(writer: BufferedWriter, context: Context, days: Int?): Int {
         val syncManager = SyncManager(context)
-        val result = syncManager.performSync(timeRangeDays = days, syncType = "api")
+        val result = syncManager.performSync(
+            timeRangeDays = days,
+            syncType = "api",
+            requireAllWebhookDeliveries = false,
+        )
         return if (result.isSuccess) {
             val syncResult = result.getOrThrow()
             val body = when (syncResult) {

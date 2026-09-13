@@ -25,6 +25,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_ENABLED_DATA_TYPES = "enabled_data_types"
         private const val KEY_WEBHOOK_LOGS = "webhook_logs"
         private const val KEY_LAST_SYNC_TIME = "last_sync_time"
+        private const val KEY_LAST_AUTOMATIC_SYNC_TIME = "last_automatic_sync_time"
         private const val KEY_LAST_SYNC_SUMMARY = "last_sync_summary"
         private const val DEFAULT_SYNC_INTERVAL_MINUTES = 60
         private const val MAX_LOGS = 100
@@ -49,8 +50,13 @@ class PreferencesManager(context: Context) {
         private const val KEY_DATA_TYPE_RESOLUTIONS = "data_type_resolutions"
         private const val KEY_BATTERY_BANNER_DISMISSED = "battery_banner_dismissed"
         private const val KEY_MAX_LOGS = "max_logs"
+        private const val KEY_LOCAL_FEEDBACK = "local_feedback"
+        private const val KEY_FIRST_OPEN_TIME = "first_open_time"
+        private const val KEY_WEEKLY_FEEDBACK_PROMPT_DISMISSED = "weekly_feedback_prompt_dismissed"
+        private const val WEEKLY_FEEDBACK_PROMPT_MS = 7L * 24 * 60 * 60 * 1000
         val MAX_LOG_OPTIONS = listOf(50, 100, 500)
         private const val DEFAULT_MAX_LOGS = 100
+        private const val MAX_LOCAL_FEEDBACK = 50
     }
 
 
@@ -240,8 +246,10 @@ class PreferencesManager(context: Context) {
             return try {
                 Json.decodeFromString<List<ScheduledSync>>(syncsJson)
             } catch (e: Exception) {
-                // If JSON parsing fails, return default schedules
-                getDefaultScheduledSyncs()
+                // If JSON parsing fails, persist defaults so schedule IDs stay stable
+                val defaults = getDefaultScheduledSyncs()
+                setScheduledSyncs(defaults)
+                defaults
             }
         }
         
@@ -254,7 +262,7 @@ class PreferencesManager(context: Context) {
         // Check if these are default values (8:00 and 21:00)
         val isDefaultValues = morningHour == 8 && morningMinute == 0 && eveningHour == 21 && eveningMinute == 0
         
-        return if (isDefaultValues) {
+        val syncs = if (isDefaultValues) {
             getDefaultScheduledSyncs()
         } else {
             // Migrate user's custom times
@@ -263,6 +271,9 @@ class PreferencesManager(context: Context) {
                 ScheduledSync.create(eveningHour, eveningMinute, "Evening")
             )
         }
+        // Persist so AlarmManager PendingIntent request codes stay stable across restarts
+        setScheduledSyncs(syncs)
+        return syncs
     }
 
     fun setScheduledSyncs(syncs: List<ScheduledSync>) {
@@ -284,6 +295,15 @@ class PreferencesManager(context: Context) {
 
     fun setLastSyncTime(timestamp: Long) {
         prefs.edit().putLong(KEY_LAST_SYNC_TIME, timestamp).apply()
+    }
+
+    fun getLastAutomaticSyncTime(): Long? {
+        val timestamp = prefs.getLong(KEY_LAST_AUTOMATIC_SYNC_TIME, -1)
+        return if (timestamp == -1L) null else timestamp
+    }
+
+    fun setLastAutomaticSyncTime(timestamp: Long) {
+        prefs.edit().putLong(KEY_LAST_AUTOMATIC_SYNC_TIME, timestamp).apply()
     }
 
     fun getLastSyncSummary(): String? {
@@ -502,5 +522,44 @@ class PreferencesManager(context: Context) {
             setHeartRateDownsampleMinutes(export.heartRateDownsampleMinutes)
             setStepsResolutionMinutes(export.stepsResolutionMinutes)
         }
+    }
+
+    fun getLocalFeedback(): List<LocalFeedbackEntry> {
+        val json = prefs.getString(KEY_LOCAL_FEEDBACK, null) ?: return emptyList()
+        return try {
+            Json.decodeFromString<List<LocalFeedbackEntry>>(json)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addLocalFeedback(entry: LocalFeedbackEntry) {
+        val updated = (listOf(entry) + getLocalFeedback()).take(MAX_LOCAL_FEEDBACK)
+        prefs.edit().putString(KEY_LOCAL_FEEDBACK, Json.encodeToString(updated)).apply()
+    }
+
+    fun ensureFirstOpenTime() {
+        if (!prefs.contains(KEY_FIRST_OPEN_TIME)) {
+            prefs.edit().putLong(KEY_FIRST_OPEN_TIME, System.currentTimeMillis()).apply()
+        }
+    }
+
+    fun shouldShowWeeklyFeedbackPrompt(): Boolean {
+        ensureFirstOpenTime()
+        if (prefs.getBoolean(KEY_WEEKLY_FEEDBACK_PROMPT_DISMISSED, false)) return false
+        val firstOpen = prefs.getLong(KEY_FIRST_OPEN_TIME, System.currentTimeMillis())
+        return System.currentTimeMillis() - firstOpen >= WEEKLY_FEEDBACK_PROMPT_MS
+    }
+
+    fun setWeeklyFeedbackPromptDismissed(dismissed: Boolean) {
+        prefs.edit().putBoolean(KEY_WEEKLY_FEEDBACK_PROMPT_DISMISSED, dismissed).apply()
+    }
+
+    /** Debug only: backdate first open and clear dismiss so the weekly Home card shows. */
+    fun debugForceWeeklyFeedbackPrompt() {
+        prefs.edit()
+            .putLong(KEY_FIRST_OPEN_TIME, System.currentTimeMillis() - WEEKLY_FEEDBACK_PROMPT_MS - 1_000L)
+            .putBoolean(KEY_WEEKLY_FEEDBACK_PROMPT_DISMISSED, false)
+            .apply()
     }
 }

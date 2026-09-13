@@ -15,7 +15,12 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.Instant
 
-/** Emit a record's Health Connect provenance as a nested "metadata" object. */
+/**
+ * Emit a record's Health Connect provenance as a nested "metadata" object.
+ * Field names mirror [ProtobufPayloadBuilder]'s `RecordMetadata.toProto()`
+ * so JSON and gRPC receivers can dedupe the same raw record by `id` plus
+ * `client_record_version` or `last_modified_time`, per docs/webhook.md.
+ */
 private fun JsonObjectBuilder.putRecordMetadata(meta: RecordMetadata) {
     putJsonObject("metadata") {
         put("data_origin", meta.dataOrigin)
@@ -25,6 +30,18 @@ private fun JsonObjectBuilder.putRecordMetadata(meta: RecordMetadata) {
                 meta.deviceManufacturer?.let { put("manufacturer", it) }
                 meta.deviceModel?.let { put("model", it) }
                 meta.deviceType?.let { put("type", it) }
+            }
+        }
+        put("id", meta.id)
+        meta.clientRecordId?.let { put("client_record_id", it) }
+        put("client_record_version", meta.clientRecordVersion)
+        meta.lastModifiedTime?.let { put("last_modified_time", it.toString()) }
+        if (meta.zoneOffsetSeconds != null) {
+            put("instant_zone_offset_seconds", meta.zoneOffsetSeconds)
+        } else if (meta.startZoneOffsetSeconds != null || meta.endZoneOffsetSeconds != null) {
+            putJsonObject("interval_zone_offset") {
+                meta.startZoneOffsetSeconds?.let { put("start_zone_offset_seconds", it) }
+                meta.endZoneOffsetSeconds?.let { put("end_zone_offset_seconds", it) }
             }
         }
     }
@@ -69,17 +86,30 @@ class SyncManager(private val context: Context) {
                 )
             }
 
-            val jsonPayload = buildJsonPayload(healthDataResult.getOrThrow())
+            val jsonPayload = try {
+                buildJsonPayload(healthDataResult.getOrThrow())
+            } catch (oom: OutOfMemoryError) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Out of memory while building JSON. Raise sample resolution or use a shorter range.",
+                        oom
+                    )
+                )
+            }
             LocalHttpServerManager.publishPayload(jsonPayload)
             Result.success(jsonPayload)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(
+                Exception("Out of memory while reading health data. Raise sample resolution or use a shorter range.", e)
+            )
         }
     }
 
-    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
+    suspend fun performSync(timeRangeDays: Int? = null, start: Instant? = null, end: Instant? = null, syncType: String = "auto", targetWebhooks: List<WebhookConfig>? = null, requireAllWebhookDeliveries: Boolean, updateLastSyncTime: Boolean = true, defaultReadEnd: Instant? = null): Result<SyncResult> = withContext(Dispatchers.IO) {
         /*
         Supports two modes:
         - timeRangeDays: the amount of days in the past to sync.
@@ -101,10 +131,9 @@ class SyncManager(private val context: Context) {
                 return@withContext Result.failure(Exception("No data types enabled"))
             }
 
-            // Keep incremental sync only for default mode.
-            // Explicit ranges (start/end or timeRangeDays) always perform a full read of that window.
-            val hasExplicitRange = start != null || end != null || timeRangeDays != null
-            val lastSyncTimestamps = if (!hasExplicitRange) {
+            // Keep per-type incremental cursors only for unbounded manual/API mode.
+            // Explicit ranges and automatic reads with a captured boundary read their full window.
+            val lastSyncTimestamps = if (shouldUsePerTypeCursors(timeRangeDays, start, end, defaultReadEnd)) {
                 enabledTypes.associateWith { type ->
                     preferencesManager.getLastSyncTimestamp(type)?.let { Instant.ofEpochMilli(it) }
                 }
@@ -118,7 +147,7 @@ class SyncManager(private val context: Context) {
                 lastSyncTimestamps = lastSyncTimestamps,
                 timeRangeDays = timeRangeDays,
                 start = start,
-                end = end,
+                end = end ?: defaultReadEnd,
                 dataTypeResolutions = preferencesManager.getDataTypeResolutions(),
             )
             if (healthDataResult.isFailure) {
@@ -129,66 +158,103 @@ class SyncManager(private val context: Context) {
 
             // Check if there's any new data
             if (isHealthDataEmpty(healthData)) {
-                preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                 preferencesManager.setLastSyncSummary("No new data")
                 return@withContext Result.success(SyncResult.NoData)
             }
 
+            val recordCount = countHealthData(healthData)
+            if (recordCount > MAX_RECORDS_PER_PAYLOAD) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Payload too large ($recordCount records). " +
+                            "Raise sample resolution (e.g. heart rate 1 min) or sync a shorter range."
+                    )
+                )
+            }
+
             // Build full payload (also used by local TCP server)
-            val fullPayload = buildJsonPayload(healthData)
+            val fullPayload = try {
+                buildJsonPayload(healthData)
+            } catch (oom: OutOfMemoryError) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Out of memory while building JSON ($recordCount records). " +
+                            "Raise sample resolution or sync a shorter range.",
+                        oom
+                    )
+                )
+            }
             LocalHttpServerManager.publishPayload(fullPayload)
 
             // Post to each enabled webhook with optional per-webhook data type filtering
             if (enabledWebhookConfigs.isNotEmpty()) {
-                var atLeastOneSuccess = false
-                var atLeastOneAttempted = false
-                var lastFailure: Throwable? = null
+                val globalNotifs = preferencesManager.getNotificationConfigs()
+
+                val outcome = deliverToWebhooks(
+                    healthData = healthData,
+                    enabledWebhookConfigs = enabledWebhookConfigs,
+                    requireAllWebhookDeliveries = requireAllWebhookDeliveries,
+                    notificationConfigsFor = { config ->
+                        config.notificationConfigIds.mapNotNull { id -> globalNotifs.find { it.id == id } }
+                    },
+                    deliver = deliver@{ config, filteredData, totalRecords ->
+                        when (config.deliveryFormat) {
+                            WebhookDeliveryFormat.JSON -> {
+                                val payload = try {
+                                    if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
+                                } catch (oom: OutOfMemoryError) {
+                                    return@deliver WebhookDeliveryAttempt.PayloadBuildFailed(
+                                        Exception(
+                                            "Out of memory while building JSON for ${config.url}. Raise sample resolution.",
+                                            oom
+                                        )
+                                    )
+                                }
+                                val manager = WebhookManager(
+                                    webhookConfigs = listOf(config),
+                                    context = context,
+                                    dataType = "all",
+                                    recordCount = totalRecords,
+                                    syncType = syncType,
+                                    payload = payload
+                                )
+                                WebhookDeliveryAttempt.Delivered(manager.postData(payload))
+                            }
+                            WebhookDeliveryFormat.GRPC -> {
+                                val grpcPayload = try {
+                                    ProtobufPayloadBuilder.build(filteredData, appVersionName)
+                                } catch (oom: OutOfMemoryError) {
+                                    return@deliver WebhookDeliveryAttempt.PayloadBuildFailed(
+                                        Exception(
+                                            "Out of memory while building protobuf for ${config.url}. Raise sample resolution.",
+                                            oom
+                                        )
+                                    )
+                                }
+                                val logJson = try {
+                                    if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
+                                } catch (_: OutOfMemoryError) {
+                                    null
+                                }
+                                WebhookDeliveryAttempt.Delivered(
+                                    GrpcWebhookClient.deliver(
+                                        config = config,
+                                        payload = grpcPayload,
+                                        context = context,
+                                        dataType = "all",
+                                        recordCount = totalRecords,
+                                        syncType = syncType,
+                                        logPayload = logJson
+                                    )
+                                )
+                            }
+                        }
+                    },
+                )
 
                 val dispatcher = NotificationDispatcher()
-                val globalNotifs = preferencesManager.getNotificationConfigs()
-                val aggregatedNotifs = mutableMapOf<NotificationConfig, MutableList<String>>()
-
-                for (config in enabledWebhookConfigs) {
-                    val filteredData = if (config.dataTypeFilter != null) {
-                        filterHealthData(healthData, config.dataTypeFilter)
-                    } else {
-                        healthData
-                    }
-                    if (isHealthDataEmpty(filteredData)) continue
-                    atLeastOneAttempted = true
-                    val payload = if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
-                    val totalRecords = countHealthData(filteredData)
-
-                    val manager = WebhookManager(
-                        webhookConfigs = listOf(config),
-                        context = context,
-                        dataType = "all",
-                        recordCount = totalRecords,
-                        syncType = syncType,
-                        payload = payload
-                    )
-                    val result = manager.postData(payload)
-                    
-                    val notifConfigs = config.notificationConfigIds.mapNotNull { id -> 
-                        globalNotifs.find { it.id == id } 
-                    }
-
-                    if (result.isSuccess) {
-                        atLeastOneSuccess = true
-                        val msg = "✅ ${config.url}: $totalRecords records"
-                        notifConfigs.forEach { nc ->
-                            aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg)
-                        }
-                    } else {
-                        lastFailure = result.exceptionOrNull()
-                        val msg = "❌ ${config.url}: ${lastFailure?.message ?: "Error"}"
-                        notifConfigs.forEach { nc ->
-                            aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg)
-                        }
-                    }
-                }
-
-                aggregatedNotifs.forEach { (nc, messages) ->
+                outcome.notifications.forEach { (nc, messages) ->
                     val title = if (messages.any { it.startsWith("❌") }) "Sync Completed with Errors" else "Sync Succeeded"
                     dispatcher.dispatch(
                         context = context,
@@ -198,13 +264,13 @@ class SyncManager(private val context: Context) {
                     )
                 }
 
-                if (!atLeastOneAttempted) {
-                    preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+                if (!outcome.attempted) {
+                    if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                     preferencesManager.setLastSyncSummary("No matching data")
                     return@withContext Result.success(SyncResult.NoMatchingData)
                 }
-                if (!atLeastOneSuccess) {
-                    return@withContext Result.failure(lastFailure ?: Exception("Failed to post to webhooks"))
+                if (!outcome.succeeded) {
+                    return@withContext Result.failure(outcome.failure ?: Exception("Failed to post to webhooks"))
                 }
             }
 
@@ -214,7 +280,7 @@ class SyncManager(private val context: Context) {
 
             // Save last sync status for UI display
             val summary = buildSyncSummary(healthData)
-            preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
+            if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
             preferencesManager.setLastSyncSummary(summary)
 
             Result.success(SyncResult.Success(syncCounts))
@@ -222,61 +288,50 @@ class SyncManager(private val context: Context) {
             throw e
         } catch (e: Exception) {
             Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(
+                Exception(
+                    "Out of memory during sync. Raise sample resolution (e.g. heart rate 1 min) or sync a shorter range.",
+                    e
+                )
+            )
         }
     }
 
-    private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
-        val allowed = allowedTypes.map { it.uppercase() }.toSet()
-        return data.copy(
-            steps = if ("STEPS" in allowed) data.steps else emptyList(),
-            sleep = if ("SLEEP" in allowed) data.sleep else emptyList(),
-            heartRate = if ("HEART_RATE" in allowed) data.heartRate else emptyList(),
-            heartRateVariability = if ("HEART_RATE_VARIABILITY" in allowed) data.heartRateVariability else emptyList(),
-            distance = if ("DISTANCE" in allowed) data.distance else emptyList(),
-            activeCalories = if ("ACTIVE_CALORIES" in allowed) data.activeCalories else emptyList(),
-            totalCalories = if ("TOTAL_CALORIES" in allowed) data.totalCalories else emptyList(),
-            weight = if ("WEIGHT" in allowed) data.weight else emptyList(),
-            height = if ("HEIGHT" in allowed) data.height else emptyList(),
-            bloodPressure = if ("BLOOD_PRESSURE" in allowed) data.bloodPressure else emptyList(),
-            bloodGlucose = if ("BLOOD_GLUCOSE" in allowed) data.bloodGlucose else emptyList(),
-            oxygenSaturation = if ("OXYGEN_SATURATION" in allowed) data.oxygenSaturation else emptyList(),
-            bodyTemperature = if ("BODY_TEMPERATURE" in allowed) data.bodyTemperature else emptyList(),
-            skinTemperature = if ("SKIN_TEMPERATURE" in allowed) data.skinTemperature else emptyList(),
-            respiratoryRate = if ("RESPIRATORY_RATE" in allowed) data.respiratoryRate else emptyList(),
-            restingHeartRate = if ("RESTING_HEART_RATE" in allowed) data.restingHeartRate else emptyList(),
-            exercise = if ("EXERCISE" in allowed) data.exercise else emptyList(),
-            hydration = if ("HYDRATION" in allowed) data.hydration else emptyList(),
-            nutrition = if ("NUTRITION" in allowed) data.nutrition else emptyList(),
-            basalMetabolicRate = if ("BASAL_METABOLIC_RATE" in allowed) data.basalMetabolicRate else emptyList(),
-            bodyFat = if ("BODY_FAT" in allowed) data.bodyFat else emptyList(),
-            leanBodyMass = if ("LEAN_BODY_MASS" in allowed) data.leanBodyMass else emptyList(),
-            vo2Max = if ("VO2_MAX" in allowed) data.vo2Max else emptyList(),
-            boneMass = if ("BONE_MASS" in allowed) data.boneMass else emptyList()
+    /**
+     * Automatic entry point that replays delivery gaps longer than the normal
+     * Health Connect lookback window. Manual and local API syncs continue to
+     * call [performSync] directly and cannot move automatic replay progress.
+     *
+     * Existing installs seed the dedicated automatic cursor once from the
+     * general last-sync timestamp. From then on, only successful automatic
+     * work advances it. Each catch-up slice uses the same explicit-range
+     * [performSync] path as other syncs, including JSON/gRPC delivery,
+     * filtering, retry, pagination throttling, logging, and cursor updates.
+     */
+    suspend fun performSyncWithCatchUp(syncType: String = "auto"): Result<SyncResult> = withContext(Dispatchers.IO) {
+        val startedAt = Instant.now()
+        runAutomaticSync(
+            automaticSyncMs = preferencesManager.getLastAutomaticSyncTime(),
+            generalSyncMs = preferencesManager.getLastSyncTime(),
+            now = startedAt,
+            syncType = syncType,
+            persistAutomaticSyncMs = preferencesManager::setLastAutomaticSyncTime,
+            persistGeneralSyncMs = preferencesManager::setLastSyncTime,
+            completionTimeMs = { Instant.now().toEpochMilli() },
+            sync = { start, end, effectiveSyncType, isReplaySlice ->
+                val request = automaticSyncRequest(start, end, effectiveSyncType, isReplaySlice)
+                performSync(
+                    start = request.start,
+                    end = request.end,
+                    syncType = request.syncType,
+                    requireAllWebhookDeliveries = request.requireAllWebhookDeliveries,
+                    updateLastSyncTime = request.updateLastSyncTime,
+                    defaultReadEnd = request.defaultReadEnd,
+                )
+            },
+            pauseBetweenSlices = { kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS) },
         )
-    }
-
-    private fun countHealthData(data: HealthData): Int {
-        return data.steps.size + data.sleep.size + data.heartRate.size +
-                data.heartRateVariability.size + data.distance.size + data.activeCalories.size +
-                data.totalCalories.size + data.weight.size + data.height.size +
-                data.bloodPressure.size + data.bloodGlucose.size + data.oxygenSaturation.size +
-                data.bodyTemperature.size + data.skinTemperature.size + data.respiratoryRate.size +
-                data.restingHeartRate.size + data.exercise.size + data.hydration.size +
-                data.nutrition.size + data.basalMetabolicRate.size + data.bodyFat.size +
-                data.leanBodyMass.size + data.vo2Max.size + data.boneMass.size
-    }
-
-    private fun isHealthDataEmpty(data: HealthData): Boolean {
-        return data.steps.isEmpty() && data.sleep.isEmpty() && data.heartRate.isEmpty() &&
-                data.heartRateVariability.isEmpty() &&
-                data.distance.isEmpty() && data.activeCalories.isEmpty() && data.totalCalories.isEmpty() &&
-                data.weight.isEmpty() && data.height.isEmpty() && data.bloodPressure.isEmpty() &&
-                data.bloodGlucose.isEmpty() && data.oxygenSaturation.isEmpty() && data.bodyTemperature.isEmpty() &&
-                data.skinTemperature.isEmpty() &&
-                data.respiratoryRate.isEmpty() && data.restingHeartRate.isEmpty() && data.exercise.isEmpty() &&
-                data.hydration.isEmpty() && data.nutrition.isEmpty() &&
-                data.basalMetabolicRate.isEmpty() && data.bodyFat.isEmpty() && data.leanBodyMass.isEmpty() &&
-                data.vo2Max.isEmpty() && data.boneMass.isEmpty()
     }
 
     /**
@@ -393,6 +448,10 @@ class SyncManager(private val context: Context) {
             preferencesManager.setLastSyncTimestamp(HealthDataType.LEAN_BODY_MASS, data.leanBodyMass.maxOf { it.time }.toEpochMilli())
             syncCounts[HealthDataType.LEAN_BODY_MASS] = data.leanBodyMass.size
         }
+        if (data.bodyWaterMass.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.BODY_WATER_MASS, data.bodyWaterMass.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.BODY_WATER_MASS] = data.bodyWaterMass.size
+        }
         if (data.vo2Max.isNotEmpty()) {
             preferencesManager.setLastSyncTimestamp(HealthDataType.VO2_MAX, data.vo2Max.maxOf { it.time }.toEpochMilli())
             syncCounts[HealthDataType.VO2_MAX] = data.vo2Max.size
@@ -400,6 +459,35 @@ class SyncManager(private val context: Context) {
         if (data.boneMass.isNotEmpty()) {
             preferencesManager.setLastSyncTimestamp(HealthDataType.BONE_MASS, data.boneMass.maxOf { it.time }.toEpochMilli())
             syncCounts[HealthDataType.BONE_MASS] = data.boneMass.size
+        }
+        if (data.menstruationFlow.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.MENSTRUATION_FLOW, data.menstruationFlow.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.MENSTRUATION_FLOW] = data.menstruationFlow.size
+        }
+        if (data.menstruationPeriod.isNotEmpty()) {
+            clampedMaxEndMs(data.menstruationPeriod.asSequence().map { it.endTime }, now)
+                ?.let { preferencesManager.setLastSyncTimestamp(HealthDataType.MENSTRUATION_PERIOD, it) }
+            syncCounts[HealthDataType.MENSTRUATION_PERIOD] = data.menstruationPeriod.size
+        }
+        if (data.intermenstrualBleeding.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.INTERMENSTRUAL_BLEEDING, data.intermenstrualBleeding.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.INTERMENSTRUAL_BLEEDING] = data.intermenstrualBleeding.size
+        }
+        if (data.ovulationTest.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.OVULATION_TEST, data.ovulationTest.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.OVULATION_TEST] = data.ovulationTest.size
+        }
+        if (data.cervicalMucus.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.CERVICAL_MUCUS, data.cervicalMucus.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.CERVICAL_MUCUS] = data.cervicalMucus.size
+        }
+        if (data.sexualActivity.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.SEXUAL_ACTIVITY, data.sexualActivity.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.SEXUAL_ACTIVITY] = data.sexualActivity.size
+        }
+        if (data.basalBodyTemperature.isNotEmpty()) {
+            preferencesManager.setLastSyncTimestamp(HealthDataType.BASAL_BODY_TEMPERATURE, data.basalBodyTemperature.maxOf { it.time }.toEpochMilli())
+            syncCounts[HealthDataType.BASAL_BODY_TEMPERATURE] = data.basalBodyTemperature.size
         }
     }
 
@@ -449,6 +537,7 @@ class SyncManager(private val context: Context) {
                             put("count", step.count)
                             put("start_time", step.startTime.toString())
                             put("end_time", step.endTime.toString())
+                            step.metadata?.let { meta -> putRecordMetadata(meta) }
                         })
                     }
                 }
@@ -516,6 +605,7 @@ class SyncManager(private val context: Context) {
                         put("meters", it.meters)
                         put("start_time", it.startTime.toString())
                         put("end_time", it.endTime.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
                     }) }
                 }
             }
@@ -526,6 +616,7 @@ class SyncManager(private val context: Context) {
                         put("calories", it.calories)
                         put("start_time", it.startTime.toString())
                         put("end_time", it.endTime.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
                     }) }
                 }
             }
@@ -658,6 +749,7 @@ class SyncManager(private val context: Context) {
                 putJsonArray("exercise") {
                     healthData.exercise.forEach { add(buildJsonObject {
                         put("type", it.type)
+                        it.title?.let { title -> put("title", title) }
                         put("start_time", it.startTime.toString())
                         put("end_time", it.endTime.toString())
                         put("duration_seconds", it.duration.seconds)
@@ -740,6 +832,32 @@ class SyncManager(private val context: Context) {
                 }
             }
 
+            if (healthData.bodyWaterMass.isNotEmpty()) {
+                putJsonArray("body_water_mass") {
+                    healthData.bodyWaterMass.forEach { add(buildJsonObject {
+                        put("kilograms", it.kilograms)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            // Health Connect has no BMI record type. Compute BMI = kg / m² when both
+            // weight and height lists are present (enabled + non-empty after filter).
+            // Pair each weight with the height closest in time.
+            if (healthData.weight.isNotEmpty() && healthData.height.isNotEmpty()) {
+                putJsonArray("bmi") {
+                    computeBmiEntries(healthData.weight, healthData.height).forEach { entry ->
+                        add(buildJsonObject {
+                            put("value", entry.value)
+                            put("time", entry.time.toString())
+                            put("weight_kg", entry.weightKg)
+                            put("height_meters", entry.heightMeters)
+                        })
+                    }
+                }
+            }
+
             if (healthData.vo2Max.isNotEmpty()) {
                 putJsonArray("vo2_max") {
                     healthData.vo2Max.forEach { add(buildJsonObject {
@@ -759,9 +877,436 @@ class SyncManager(private val context: Context) {
                     }) }
                 }
             }
+
+            if (healthData.menstruationFlow.isNotEmpty()) {
+                putJsonArray("menstruation_flow") {
+                    healthData.menstruationFlow.forEach { add(buildJsonObject {
+                        put("flow", it.flow)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.menstruationPeriod.isNotEmpty()) {
+                putJsonArray("menstruation_period") {
+                    healthData.menstruationPeriod.forEach { add(buildJsonObject {
+                        put("start_time", it.startTime.toString())
+                        put("end_time", it.endTime.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.intermenstrualBleeding.isNotEmpty()) {
+                putJsonArray("intermenstrual_bleeding") {
+                    healthData.intermenstrualBleeding.forEach { add(buildJsonObject {
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.ovulationTest.isNotEmpty()) {
+                putJsonArray("ovulation_test") {
+                    healthData.ovulationTest.forEach { add(buildJsonObject {
+                        put("result", it.result)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.cervicalMucus.isNotEmpty()) {
+                putJsonArray("cervical_mucus") {
+                    healthData.cervicalMucus.forEach { add(buildJsonObject {
+                        put("appearance", it.appearance)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.sexualActivity.isNotEmpty()) {
+                putJsonArray("sexual_activity") {
+                    healthData.sexualActivity.forEach { add(buildJsonObject {
+                        put("protection_used", it.protectionUsed)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
+
+            if (healthData.basalBodyTemperature.isNotEmpty()) {
+                putJsonArray("basal_body_temperature") {
+                    healthData.basalBodyTemperature.forEach { add(buildJsonObject {
+                        put("celsius", it.celsius)
+                        put("measurement_location", it.measurementLocation)
+                        put("time", it.time.toString())
+                        it.metadata?.let { meta -> putRecordMetadata(meta) }
+                    }) }
+                }
+            }
         } // End of buildJsonObject block
 
         return json.toString()
+    }
+
+    companion object {
+        /**
+         * Soft cap before JSON encode. Full-resolution heart rate over 48h can
+         * exceed this and OOMs mid-tier devices while building JsonObject trees.
+         */
+        private const val MAX_RECORDS_PER_PAYLOAD = 25_000
+
+        /** Coupled to the default Health Connect read window. */
+        private const val GAP_THRESHOLD_HOURS = HealthConnectManager.LOOKBACK_HOURS
+        private const val MAX_CATCHUP_DAYS = 30L
+        private const val SLICE_HOURS = 24L
+        private const val INTER_SLICE_DELAY_MS = 500L
+
+        /**
+         * Recovers records ingested or modified shortly before a previously
+         * committed automatic boundary without moving that boundary itself.
+         * Bounded to one slice so the guarantee stays documented and finite.
+         */
+        private const val AUTOMATIC_OVERLAP_HOURS = 24L
+
+        /**
+         * Centralizes the effective read start for an automatic request that
+         * has a committed automatic boundary (a normal read's cursor, or a
+         * replay slice's start). Subtracts [AUTOMATIC_OVERLAP_HOURS] from
+         * [committedBoundaryMs] and clamps the result to the existing 30-day
+         * catch-up horizon. The checkpoint written for the request stays the
+         * original, non-overlapped boundary.
+         */
+        internal fun overlappedAutomaticReadStart(committedBoundaryMs: Long, now: Instant): Instant {
+            val overlapMs = AUTOMATIC_OVERLAP_HOURS * 3_600_000L
+            val earliestAllowedMs = now.toEpochMilli() - MAX_CATCHUP_DAYS * 24L * 3_600_000L
+            val overlappedMs = maxOf(committedBoundaryMs - overlapMs, earliestAllowedMs)
+            return Instant.ofEpochMilli(overlappedMs)
+        }
+
+        internal data class AutomaticSyncCursorSelection(
+            val timestampMs: Long?,
+            val seededFromGeneral: Boolean,
+        )
+
+        /** Selects dedicated progress, or a one-time compatibility seed. */
+        internal fun selectAutomaticSyncCursor(
+            automaticSyncMs: Long?,
+            generalSyncMs: Long?,
+        ): AutomaticSyncCursorSelection = when {
+            automaticSyncMs != null -> AutomaticSyncCursorSelection(automaticSyncMs, false)
+            generalSyncMs != null -> AutomaticSyncCursorSelection(generalSyncMs, true)
+            else -> AutomaticSyncCursorSelection(null, false)
+        }
+
+        /** Advances progress only for a successfully completed automatic unit. */
+        internal fun nextAutomaticSyncCursor(
+            currentCursorMs: Long?,
+            completedBoundaryMs: Long,
+            syncSucceeded: Boolean,
+        ): Long? {
+            if (!syncSucceeded) return currentCursorMs
+            return completedBoundaryMs
+        }
+
+        /** Automatic replay is complete only when every attempted destination succeeds. */
+        internal fun webhookBatchSucceeded(
+            atLeastOneSuccess: Boolean,
+            atLeastOneFailure: Boolean,
+            requireAllWebhookDeliveries: Boolean,
+        ): Boolean = atLeastOneSuccess && (!requireAllWebhookDeliveries || !atLeastOneFailure)
+
+        private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
+            val allowed = allowedTypes.map { it.uppercase() }.toSet()
+            return data.copy(
+                steps = if ("STEPS" in allowed) data.steps else emptyList(),
+                sleep = if ("SLEEP" in allowed) data.sleep else emptyList(),
+                heartRate = if ("HEART_RATE" in allowed) data.heartRate else emptyList(),
+                heartRateVariability = if ("HEART_RATE_VARIABILITY" in allowed) data.heartRateVariability else emptyList(),
+                distance = if ("DISTANCE" in allowed) data.distance else emptyList(),
+                activeCalories = if ("ACTIVE_CALORIES" in allowed) data.activeCalories else emptyList(),
+                totalCalories = if ("TOTAL_CALORIES" in allowed) data.totalCalories else emptyList(),
+                weight = if ("WEIGHT" in allowed) data.weight else emptyList(),
+                height = if ("HEIGHT" in allowed) data.height else emptyList(),
+                bloodPressure = if ("BLOOD_PRESSURE" in allowed) data.bloodPressure else emptyList(),
+                bloodGlucose = if ("BLOOD_GLUCOSE" in allowed) data.bloodGlucose else emptyList(),
+                oxygenSaturation = if ("OXYGEN_SATURATION" in allowed) data.oxygenSaturation else emptyList(),
+                bodyTemperature = if ("BODY_TEMPERATURE" in allowed) data.bodyTemperature else emptyList(),
+                skinTemperature = if ("SKIN_TEMPERATURE" in allowed) data.skinTemperature else emptyList(),
+                respiratoryRate = if ("RESPIRATORY_RATE" in allowed) data.respiratoryRate else emptyList(),
+                restingHeartRate = if ("RESTING_HEART_RATE" in allowed) data.restingHeartRate else emptyList(),
+                exercise = if ("EXERCISE" in allowed) data.exercise else emptyList(),
+                hydration = if ("HYDRATION" in allowed) data.hydration else emptyList(),
+                nutrition = if ("NUTRITION" in allowed) data.nutrition else emptyList(),
+                basalMetabolicRate = if ("BASAL_METABOLIC_RATE" in allowed) data.basalMetabolicRate else emptyList(),
+                bodyFat = if ("BODY_FAT" in allowed) data.bodyFat else emptyList(),
+                leanBodyMass = if ("LEAN_BODY_MASS" in allowed) data.leanBodyMass else emptyList(),
+                bodyWaterMass = if ("BODY_WATER_MASS" in allowed) data.bodyWaterMass else emptyList(),
+                vo2Max = if ("VO2_MAX" in allowed) data.vo2Max else emptyList(),
+                boneMass = if ("BONE_MASS" in allowed) data.boneMass else emptyList(),
+                menstruationFlow = if ("MENSTRUATION_FLOW" in allowed) data.menstruationFlow else emptyList(),
+                menstruationPeriod = if ("MENSTRUATION_PERIOD" in allowed) data.menstruationPeriod else emptyList(),
+                intermenstrualBleeding = if ("INTERMENSTRUAL_BLEEDING" in allowed) data.intermenstrualBleeding else emptyList(),
+                ovulationTest = if ("OVULATION_TEST" in allowed) data.ovulationTest else emptyList(),
+                cervicalMucus = if ("CERVICAL_MUCUS" in allowed) data.cervicalMucus else emptyList(),
+                sexualActivity = if ("SEXUAL_ACTIVITY" in allowed) data.sexualActivity else emptyList(),
+                basalBodyTemperature = if ("BASAL_BODY_TEMPERATURE" in allowed) data.basalBodyTemperature else emptyList()
+            )
+        }
+
+        private fun countHealthData(data: HealthData): Int {
+            return data.steps.size + data.sleep.size + data.heartRate.size +
+                    data.heartRateVariability.size + data.distance.size + data.activeCalories.size +
+                    data.totalCalories.size + data.weight.size + data.height.size +
+                    data.bloodPressure.size + data.bloodGlucose.size + data.oxygenSaturation.size +
+                    data.bodyTemperature.size + data.skinTemperature.size + data.respiratoryRate.size +
+                    data.restingHeartRate.size + data.exercise.size + data.hydration.size +
+                    data.nutrition.size + data.basalMetabolicRate.size + data.bodyFat.size +
+                    data.leanBodyMass.size + data.bodyWaterMass.size + data.vo2Max.size + data.boneMass.size +
+                    data.menstruationFlow.size + data.menstruationPeriod.size +
+                    data.intermenstrualBleeding.size + data.ovulationTest.size +
+                    data.cervicalMucus.size + data.sexualActivity.size + data.basalBodyTemperature.size
+        }
+
+        private fun isHealthDataEmpty(data: HealthData): Boolean {
+            return data.steps.isEmpty() && data.sleep.isEmpty() && data.heartRate.isEmpty() &&
+                    data.heartRateVariability.isEmpty() &&
+                    data.distance.isEmpty() && data.activeCalories.isEmpty() && data.totalCalories.isEmpty() &&
+                    data.weight.isEmpty() && data.height.isEmpty() && data.bloodPressure.isEmpty() &&
+                    data.bloodGlucose.isEmpty() && data.oxygenSaturation.isEmpty() && data.bodyTemperature.isEmpty() &&
+                    data.skinTemperature.isEmpty() &&
+                    data.respiratoryRate.isEmpty() && data.restingHeartRate.isEmpty() && data.exercise.isEmpty() &&
+                    data.hydration.isEmpty() && data.nutrition.isEmpty() &&
+                    data.basalMetabolicRate.isEmpty() && data.bodyFat.isEmpty() && data.leanBodyMass.isEmpty() &&
+                    data.bodyWaterMass.isEmpty() &&
+                    data.vo2Max.isEmpty() && data.boneMass.isEmpty() &&
+                    data.menstruationFlow.isEmpty() && data.menstruationPeriod.isEmpty() &&
+                    data.intermenstrualBleeding.isEmpty() && data.ovulationTest.isEmpty() &&
+                    data.cervicalMucus.isEmpty() && data.sexualActivity.isEmpty() && data.basalBodyTemperature.isEmpty()
+        }
+
+        /**
+         * Production coordinator for per-webhook delivery, shared by every
+         * [SyncManager.performSync] call. Preserves per-webhook data-type
+         * filtering, skips webhooks with no matching data, and aggregates
+         * notification messages exactly as the delivery loop used to inline.
+         * [deliver] performs the actual JSON or gRPC network call (or reports
+         * that the payload itself couldn't be built) for one webhook config;
+         * injecting it lets JVM tests exercise this aggregation — including
+         * the `requireAllWebhookDeliveries` semantics from
+         * [webhookBatchSucceeded] — without touching Android APIs.
+         *
+         * A [WebhookDeliveryAttempt.PayloadBuildFailed] result (e.g. an
+         * out-of-memory building the payload for one oversized webhook)
+         * counts toward failure the same as a delivered-but-rejected result,
+         * but is not surfaced as a notification: there is no meaningful
+         * per-webhook message to show before a payload even exists.
+         */
+        internal suspend fun deliverToWebhooks(
+            healthData: HealthData,
+            enabledWebhookConfigs: List<WebhookConfig>,
+            requireAllWebhookDeliveries: Boolean,
+            notificationConfigsFor: (WebhookConfig) -> List<NotificationConfig>,
+            deliver: suspend (config: WebhookConfig, filteredData: HealthData, totalRecords: Int) -> WebhookDeliveryAttempt,
+        ): WebhookDeliveryOutcome {
+            var atLeastOneSuccess = false
+            var atLeastOneAttempted = false
+            var atLeastOneFailure = false
+            var lastFailure: Throwable? = null
+            val aggregatedNotifs = mutableMapOf<NotificationConfig, MutableList<String>>()
+
+            for (config in enabledWebhookConfigs) {
+                val filteredData = if (config.dataTypeFilter != null) {
+                    filterHealthData(healthData, config.dataTypeFilter)
+                } else {
+                    healthData
+                }
+                if (isHealthDataEmpty(filteredData)) continue
+                atLeastOneAttempted = true
+                val totalRecords = countHealthData(filteredData)
+
+                when (val attempt = deliver(config, filteredData, totalRecords)) {
+                    is WebhookDeliveryAttempt.PayloadBuildFailed -> {
+                        atLeastOneFailure = true
+                        lastFailure = attempt.failure
+                    }
+                    is WebhookDeliveryAttempt.Delivered -> {
+                        val notifConfigs = notificationConfigsFor(config)
+                        if (attempt.result.isSuccess) {
+                            atLeastOneSuccess = true
+                            val msg = "✅ ${config.url}: $totalRecords records"
+                            notifConfigs.forEach { nc -> aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg) }
+                        } else {
+                            atLeastOneFailure = true
+                            lastFailure = attempt.result.exceptionOrNull()
+                            val msg = "❌ ${config.url}: ${lastFailure?.message ?: "Error"}"
+                            notifConfigs.forEach { nc -> aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg) }
+                        }
+                    }
+                }
+            }
+
+            return WebhookDeliveryOutcome(
+                attempted = atLeastOneAttempted,
+                succeeded = webhookBatchSucceeded(atLeastOneSuccess, atLeastOneFailure, requireAllWebhookDeliveries),
+                failure = lastFailure,
+                notifications = aggregatedNotifs,
+            )
+        }
+
+        internal data class AutomaticSyncRequest(
+            val start: Instant?,
+            val end: Instant?,
+            val defaultReadEnd: Instant?,
+            val syncType: String,
+            val updateLastSyncTime: Boolean,
+            val requireAllWebhookDeliveries: Boolean,
+        )
+
+        /**
+         * Maps orchestration boundaries to the normal or explicit-range sync
+         * path. Automatic calls never let [SyncManager.performSync] update the
+         * general timestamp itself: [runAutomaticSync] owns that write and
+         * persists it only after the automatic boundary it corresponds to has
+         * already been persisted, so a crash between the two writes can never
+         * leave the general timestamp ahead of the automatic cursor.
+         */
+        internal fun automaticSyncRequest(
+            start: Instant?,
+            boundary: Instant?,
+            syncType: String,
+            isReplaySlice: Boolean,
+        ): AutomaticSyncRequest {
+            return AutomaticSyncRequest(
+                start = start,
+                end = if (isReplaySlice) boundary else null,
+                defaultReadEnd = if (isReplaySlice) null else boundary,
+                syncType = syncType,
+                updateLastSyncTime = false,
+                requireAllWebhookDeliveries = true,
+            )
+        }
+
+        /** Per-type progress belongs only to unbounded manual/API incremental reads. */
+        internal fun shouldUsePerTypeCursors(
+            timeRangeDays: Int?,
+            start: Instant?,
+            end: Instant?,
+            defaultReadEnd: Instant?,
+        ): Boolean = timeRangeDays == null && start == null && end == null && defaultReadEnd == null
+
+        /**
+         * Runs automatic progress orchestration behind injectable boundaries so
+         * cursor persistence and failure sequencing can be covered by JVM tests.
+         */
+        internal suspend fun runAutomaticSync(
+            automaticSyncMs: Long?,
+            generalSyncMs: Long?,
+            now: Instant,
+            syncType: String,
+            persistAutomaticSyncMs: (Long) -> Unit,
+            persistGeneralSyncMs: (Long) -> Unit,
+            completionTimeMs: () -> Long,
+            sync: suspend (Instant?, Instant?, String, Boolean) -> Result<SyncResult>,
+            pauseBetweenSlices: suspend () -> Unit,
+        ): Result<SyncResult> {
+            val cursorSelection = selectAutomaticSyncCursor(automaticSyncMs, generalSyncMs)
+            var cursorMs = cursorSelection.timestampMs
+            if (cursorSelection.seededFromGeneral) {
+                persistAutomaticSyncMs(cursorMs!!)
+            }
+
+            val slices = planCatchUpSlices(cursorMs, now)
+            if (slices == null) {
+                val normalStart = cursorMs
+                    ?.takeIf { it <= now.toEpochMilli() }
+                    ?.let { overlappedAutomaticReadStart(it, now) }
+                val result = sync(normalStart, now, syncType, false)
+                val nextCursor = nextAutomaticSyncCursor(cursorMs, now.toEpochMilli(), result.isSuccess)
+                // Automatic boundary first, general status second: a failure
+                // leaves nextCursor unchanged and result.isSuccess false, so
+                // neither write happens.
+                if (nextCursor != cursorMs) persistAutomaticSyncMs(nextCursor!!)
+                if (result.isSuccess) persistGeneralSyncMs(completionTimeMs())
+                return result
+            }
+
+            var lastResult: Result<SyncResult> = Result.success(SyncResult.NoData)
+            for ((sliceStart, sliceEnd) in slices) {
+                val readStart = overlappedAutomaticReadStart(sliceStart.toEpochMilli(), now)
+                val result = sync(readStart, sliceEnd, "catchup", true)
+                val nextCursor = nextAutomaticSyncCursor(
+                    currentCursorMs = cursorMs,
+                    completedBoundaryMs = sliceEnd.toEpochMilli(),
+                    syncSucceeded = result.isSuccess,
+                )
+                if (nextCursor != cursorMs) {
+                    persistAutomaticSyncMs(nextCursor!!)
+                    cursorMs = nextCursor
+                }
+                if (result.isFailure) return result
+                lastResult = result
+                if (sliceEnd.isBefore(now)) pauseBetweenSlices()
+            }
+
+            persistGeneralSyncMs(completionTimeMs())
+            return lastResult
+        }
+
+        /**
+         * Returns ordered 24-hour replay slices when the stored automatic
+         * cursor is more than one normal lookback window behind [now].
+         */
+        internal fun planCatchUpSlices(lastSyncMs: Long?, now: Instant): List<Pair<Instant, Instant>>? {
+            if (lastSyncMs == null) return null
+            val gapThresholdMs = GAP_THRESHOLD_HOURS * 3_600_000L
+            if (now.toEpochMilli() - lastSyncMs <= gapThresholdMs) return null
+
+            val earliestAllowed = now.minusSeconds(MAX_CATCHUP_DAYS * 24L * 3_600L)
+            var sliceStart = Instant.ofEpochMilli(lastSyncMs)
+            if (sliceStart.isBefore(earliestAllowed)) sliceStart = earliestAllowed
+
+            val sliceMillis = SLICE_HOURS * 3_600_000L
+            val slices = mutableListOf<Pair<Instant, Instant>>()
+            while (sliceStart.isBefore(now)) {
+                val candidateEnd = sliceStart.plusMillis(sliceMillis)
+                val sliceEnd = if (candidateEnd.isAfter(now)) now else candidateEnd
+                slices.add(sliceStart to sliceEnd)
+                sliceStart = sliceEnd
+            }
+            return slices
+        }
+    }
+
+    private data class BmiEntry(
+        val value: Double,
+        val time: Instant,
+        val weightKg: Double,
+        val heightMeters: Double
+    )
+
+    /** BMI = kg / m². Pair each weight with the height record closest in time. */
+    private fun computeBmiEntries(
+        weights: List<WeightData>,
+        heights: List<HeightData>
+    ): List<BmiEntry> {
+        if (weights.isEmpty() || heights.isEmpty()) return emptyList()
+        return weights.mapNotNull { weight ->
+            val height = heights.minByOrNull { h ->
+                kotlin.math.abs(h.time.toEpochMilli() - weight.time.toEpochMilli())
+            } ?: return@mapNotNull null
+            if (height.meters <= 0.0) return@mapNotNull null
+            val bmi = weight.kilograms / (height.meters * height.meters)
+            BmiEntry(
+                value = bmi,
+                time = weight.time,
+                weightKg = weight.kilograms,
+                heightMeters = height.meters
+            )
+        }
     }
 }
 
@@ -770,3 +1315,23 @@ sealed class SyncResult {
     object NoMatchingData : SyncResult()
     data class Success(val syncCounts: Map<HealthDataType, Int>) : SyncResult()
 }
+
+/** One webhook's delivery attempt: a real send, or a failure to even build its payload. */
+internal sealed class WebhookDeliveryAttempt {
+    data class Delivered(val result: Result<Unit>) : WebhookDeliveryAttempt()
+    data class PayloadBuildFailed(val failure: Throwable) : WebhookDeliveryAttempt()
+}
+
+/**
+ * Aggregated result of [SyncManager.deliverToWebhooks]: whether any webhook
+ * had matching data to send, whether the batch counts as succeeded under the
+ * caller's [SyncManager.performSync] `requireAllWebhookDeliveries` policy,
+ * the last failure (if any), and per-[NotificationConfig] messages ready to
+ * dispatch.
+ */
+internal data class WebhookDeliveryOutcome(
+    val attempted: Boolean,
+    val succeeded: Boolean,
+    val failure: Throwable?,
+    val notifications: Map<NotificationConfig, List<String>>,
+)

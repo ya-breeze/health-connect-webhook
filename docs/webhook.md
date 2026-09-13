@@ -1,10 +1,16 @@
 # Webhook payload reference
 
-HC Webhook delivers health data as a **single JSON object** in the HTTP request body. The same structure is used for **remote webhooks** (POST) and for responses from the **optional local HTTP server** (GET), so one schema covers both.
+HC Webhook can deliver health data in two formats, chosen per webhook:
 
-Implementation: `buildJsonPayload` in `app/src/main/java/com/hcwebhook/app/SyncManager.kt`.
+1. **JSON** (default) — HTTP `POST` with a JSON body (this document’s schema).
+2. **Protobuf / gRPC** — unary gRPC `HealthWebhook.Deliver` using the published schema in [`proto/hcwebhook/v1/health_payload.proto`](../proto/hcwebhook/v1/health_payload.proto).
 
-## HTTP request (remote webhooks)
+The optional local HTTP server still uses **JSON only**.
+
+JSON implementation: `buildJsonPayload` in `app/src/main/java/com/hcwebhook/app/SyncManager.kt`.  
+Protobuf implementation: `ProtobufPayloadBuilder` + `GrpcWebhookClient`.
+
+## HTTP request (JSON webhooks)
 
 | Property | Value |
 |----------|--------|
@@ -15,6 +21,101 @@ Implementation: `buildJsonPayload` in `app/src/main/java/com/hcwebhook/app/SyncM
 The app may attach **custom headers** per webhook URL as configured in the app. There is no built-in signature or auth header unless you add it there.
 
 Successful delivery is any HTTP **2xx** response. Failed requests are retried briefly (a few attempts with backoff); if all attempts fail, the next manual, interval, or scheduled sync can try again with the same incremental rules.
+
+## gRPC delivery (Protobuf)
+
+| Property | Value |
+|----------|--------|
+| Protocol | gRPC over HTTP/2 |
+| Package / service | `hcwebhook.v1.HealthWebhook` |
+| RPC | `Deliver(HealthPayload) returns (DeliverResponse)` |
+| Success | `DeliverResponse.ok == true` |
+| Schema file | [`proto/hcwebhook/v1/health_payload.proto`](../proto/hcwebhook/v1/health_payload.proto) |
+| App encoder | `ProtobufPayloadBuilder` |
+| App client | `GrpcWebhookClient` |
+| Example servers | [`server/example/`](../server/example/) |
+
+### Configure in the app
+
+1. Open **Webhooks** → edit a webhook.
+2. Set **Delivery format** to **Protobuf / gRPC**.
+3. Enter a **gRPC target** (see table below).
+4. Optional: add custom headers (become gRPC metadata; keys are lowercased).
+5. Optional: tap **Share schema (.proto)** to export the bundled schema via the system share sheet.
+6. Tap **Test**.
+
+### Target URL forms
+
+| Example | Transport | Notes |
+|---------|-----------|--------|
+| `http://192.168.1.10:50051` | Plaintext | Best for LAN demos |
+| `192.168.1.10:50051` | Plaintext | Port ≠ 443 ⇒ plaintext |
+| `https://hooks.example.com` | TLS | Default port 443 |
+| `hooks.example.com:443` | TLS | Explicit TLS port |
+| `hooks.example.com` | TLS | Bare host defaults to port 443 + TLS |
+
+### Authentication
+
+There is no built-in signature scheme. Use custom webhook headers.
+
+Example: set header `x-api-key: supersecret`. The gRPC client attaches it as metadata. Example servers accept the same value via env `API_KEY`.
+
+### TLS
+
+- **LAN:** use plaintext (`http://IP:50051`).
+- **Production:** terminate TLS with a trusted certificate (reverse proxy recommended).
+- Self-signed certs usually fail on Android until the device trusts the CA. Prefer Let’s Encrypt (or similar).
+
+See [`server/example/README.md`](../server/example/README.md) for Docker, auth, and TLS recipes.
+
+### Example servers (runnable)
+
+| Stack | Command (from `server/example`) |
+|-------|----------------------------------|
+| Python (Docker) | `docker compose --profile python up --build` |
+| TypeScript (Docker) | `docker compose --profile typescript up --build` |
+| Python (local) | see [`server/example/python/README.md`](../server/example/python/README.md) |
+| TypeScript (local) | see [`server/example/typescript/README.md`](../server/example/typescript/README.md) |
+| Go | see [`server/example/go/README.md`](../server/example/go/README.md) |
+| PHP | see [`server/example/php/README.md`](../server/example/php/README.md) |
+
+### Generate your own server
+
+Use the published `.proto` with your language’s gRPC tooling:
+
+```bash
+# Go
+protoc -I proto --go_out=. --go-grpc_out=. proto/hcwebhook/v1/health_payload.proto
+
+# Python
+python -m grpc_tools.protoc -I proto --python_out=. --grpc_python_out=. \
+  proto/hcwebhook/v1/health_payload.proto
+```
+
+Implement `Deliver`, accept `HealthPayload`, return `{ ok: true }`.
+
+Field names and units match the JSON tables below (same logical schema). The proto
+form differs where protobuf can be stricter than JSON:
+
+- Record instants are `google.protobuf.Timestamp` and durations are
+  `google.protobuf.Duration` (the envelope `timestamp` stays an ISO-8601 string).
+- Records that can be a single sample **or** an aggregate — `heart_rate`,
+  `heart_rate_variability`, `oxygen_saturation`, `respiratory_rate`,
+  `skin_temperature` — carry a `oneof value { sample; aggregate; }` so only one
+  form is ever set.
+- `RecordMetadata` also carries `id`, `client_record_id`, `client_record_version`,
+  `last_modified_time` (record identity for deduplication / update detection) and
+  a `zone_offset` oneof — `instant_zone_offset_seconds` for instant records or
+  `interval_zone_offset` (start/end) for interval records — the UTC offsets Health
+  Connect stores, for local-day aggregation.
+
+### Schema distribution
+
+| Audience | How to get the `.proto` |
+|----------|-------------------------|
+| App user | **Share schema (.proto)** in the webhook editor |
+| Developer / CI | Repo path `proto/hcwebhook/v1/health_payload.proto` |
+| Example Docker builds | Copied into the image at build time |
 
 ## Root JSON object
 
@@ -32,11 +133,16 @@ Unless noted otherwise, time-valued fields use **`java.time.Instant.toString()`*
 
 ### Which records appear (incremental vs full window)
 
-- **Background / manual sync (default)**  
+- **Manual / local API sync (default)**
   Reads within a rolling **48-hour** window (`HealthConnectManager`) and, for each enabled type, applies the **last successful sync instant** for that type so only **new or updated** records (relative to that watermark) are included. First sync has no watermark, so everything in the window can appear.
 
 - **Explicit range** (e.g. local HTTP `?days=7` or a chosen start/end)  
   Uses the requested window and **does not** apply last-sync filtering; the payload can contain all records in that range for enabled types.
+
+- **Scheduled / interval sync**
+  Reads from a dedicated last-successful automatic cursor to a boundary captured before the read, independently of the general last-sync status and per-type watermarks updated by manual or local API activity. If that automatic-delivery gap exceeds 48 hours, the missed period is delivered oldest first as explicit 24-hour slices, using the same filtering and JSON or gRPC delivery paths as ordinary syncs, and is clamped to 30 days. Existing installs seed this cursor once from their general last-sync timestamp.
+
+  Every automatic read — normal or replay — additionally starts 24 hours before its committed cursor (also clamped to the 30-day catch-up horizon), so a record ingested or modified up to 24 hours after the cursor it should have appeared under is still included the next time that boundary is read. The committed cursor itself never moves backward for this: only the read window is widened. Delivery stays **at-least-once**; receivers dedupe using the identity fields in [Record metadata](#record-metadata) below. Backdating older than the 24-hour overlap falls outside this guarantee and needs an explicit-range sync (a chosen start/end, or local HTTP `?days=N`) to recover.
 
 Only types the user enabled **and** granted Health Connect permission for are read; others simply produce no arrays.
 
@@ -240,6 +346,78 @@ Health Connect can store multiple samples per interval; the app emits **one JSON
 |-------|------|-------------|
 | `kilograms` | number | Mass in kg. |
 | `time` | string | Measurement time. |
+
+### `menstruation_flow` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `flow` | number (integer) | Flow intensity (e.g., light, medium, heavy as defined by Health Connect constants). |
+| `time` | string | Measurement time. |
+
+### `menstruation_period` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `start_time` | string | Period start time. |
+| `end_time` | string | Period end time. |
+
+### `intermenstrual_bleeding` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `time` | string | Occurrence time. |
+
+### `ovulation_test` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result` | number (integer) | Ovulation test result (as defined by Health Connect constants). |
+| `time` | string | Measurement time. |
+
+### `cervical_mucus` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `appearance` | number (integer) | Cervical mucus appearance (as defined by Health Connect constants). |
+| `time` | string | Measurement time. |
+
+### `sexual_activity` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `protection_used` | number (integer) | Protection used (as defined by Health Connect constants). |
+| `time` | string | Measurement time. |
+
+### `basal_body_temperature` — array of objects
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `celsius` | number | Temperature in °C. |
+| `measurement_location` | number (integer) | Measurement location (as defined by Health Connect constants). |
+| `time` | string | Measurement time. |
+
+---
+
+## Record metadata
+
+Every record object above carries an optional nested `metadata` object with the record's Health Connect provenance. The same fields, with the same names, are also on `RecordMetadata` in the Protobuf schema (`ProtobufPayloadBuilder.toProto()`), so JSON and gRPC receivers see identical identity data.
+
+| Field | Type | Always present | Description |
+|-------|------|-----------------|-------------|
+| `data_origin` | string | yes | Package name of the app that wrote the record. |
+| `recording_method` | string | yes | `"actively_recorded"`, `"automatically_recorded"`, or the raw Health Connect value. |
+| `device` | object | no | Present only if Health Connect reports device provenance; may include `manufacturer`, `model`, `type`. |
+| `id` | string | yes | Health Connect's stable record id. |
+| `client_record_id` | string | no | Writer-assigned id for correlating with the source app's own records. |
+| `client_record_version` | number (integer) | yes | Writer-assigned version; when the same `client_record_id` is re-sent, the higher version is the newer state. |
+| `last_modified_time` | string | no | ISO-8601 instant Health Connect last modified this record. |
+| `instant_zone_offset_seconds` | number (integer) | no | UTC offset at the record's instant, for instant records. Mutually exclusive with `interval_zone_offset`. |
+| `interval_zone_offset` | object | no | `{ "start_zone_offset_seconds", "end_zone_offset_seconds" }`, for interval records. Mutually exclusive with `instant_zone_offset_seconds`. |
+
+### Deduplication and upsert keys
+
+- **Raw records** (every array element whose `metadata.id` traces back to one Health Connect record): dedupe on `metadata.id`. Delivery is **at-least-once** — the same id can arrive again, most often from the [bounded late-ingestion overlap](#which-records-appear-incremental-vs-full-window) on scheduled sync. When two deliveries share an id, keep the one with the higher `client_record_version`, or the newer `last_modified_time` if version is absent or tied.
+- **Resolution-generated aggregates** (a daily total or an N-minute bucket produced by a data type's configured resolution, e.g. bucketed `steps` or `heart_rate`) are not a single Health Connect record. Some carry a `metadata` copied from one contributing sample, which is **not** a stable identity for the bucket — do not dedupe aggregates by `metadata.id`. Instead, treat each aggregate as an **upsert keyed by data type plus its bucket `start_time`/`end_time`** (or `time` for a daily total): a later delivery for the same data type and bucket window replaces the prior value rather than accumulating with it.
 
 ---
 
