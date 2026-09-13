@@ -14,6 +14,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import com.hcwebhook.app.dashboard.DashboardFormatter
 import com.hcwebhook.app.dashboard.DashboardMetric
@@ -88,11 +89,35 @@ enum class HealthDataType(val nameResId: Int, val recordClass: KClass<out Record
     LEAN_BODY_MASS(
         R.string.dt_lbm_name, LeanBodyMassRecord::class, R.string.dt_lbm_rationale
     ),
+    BODY_WATER_MASS(
+        R.string.dt_bwm_name, BodyWaterMassRecord::class, R.string.dt_bwm_rationale
+    ),
     VO2_MAX(
         R.string.dt_vo2_name, Vo2MaxRecord::class, R.string.dt_vo2_rationale
     ),
     BONE_MASS(
         R.string.dt_bone_name, BoneMassRecord::class, R.string.dt_bone_rationale
+    ),
+    MENSTRUATION_FLOW(
+        R.string.dt_menstruation_flow_name, MenstruationFlowRecord::class, R.string.dt_menstruation_flow_rationale
+    ),
+    MENSTRUATION_PERIOD(
+        R.string.dt_menstruation_period_name, MenstruationPeriodRecord::class, R.string.dt_menstruation_period_rationale
+    ),
+    INTERMENSTRUAL_BLEEDING(
+        R.string.dt_intermenstrual_bleeding_name, IntermenstrualBleedingRecord::class, R.string.dt_intermenstrual_bleeding_rationale
+    ),
+    OVULATION_TEST(
+        R.string.dt_ovulation_test_name, OvulationTestRecord::class, R.string.dt_ovulation_test_rationale
+    ),
+    CERVICAL_MUCUS(
+        R.string.dt_cervical_mucus_name, CervicalMucusRecord::class, R.string.dt_cervical_mucus_rationale
+    ),
+    SEXUAL_ACTIVITY(
+        R.string.dt_sexual_activity_name, SexualActivityRecord::class, R.string.dt_sexual_activity_rationale
+    ),
+    BASAL_BODY_TEMPERATURE(
+        R.string.dt_basal_body_temp_name, BasalBodyTemperatureRecord::class, R.string.dt_basal_body_temp_rationale
     )
 }
 
@@ -119,40 +144,92 @@ data class HealthData(
     val basalMetabolicRate: List<BasalMetabolicRateData>,
     val bodyFat: List<BodyFatData>,
     val leanBodyMass: List<LeanBodyMassData>,
+    val bodyWaterMass: List<BodyWaterMassData>,
     val vo2Max: List<Vo2MaxData>,
-    val boneMass: List<BoneMassData>
-)
+    val boneMass: List<BoneMassData>,
+    val menstruationFlow: List<MenstruationFlowData>,
+    val menstruationPeriod: List<MenstruationPeriodData>,
+    val intermenstrualBleeding: List<IntermenstrualBleedingData>,
+    val ovulationTest: List<OvulationTestData>,
+    val cervicalMucus: List<CervicalMucusData>,
+    val sexualActivity: List<SexualActivityData>,
+    val basalBodyTemperature: List<BasalBodyTemperatureData>
+) {
+    fun totalRecordCount(): Int =
+        steps.size + sleep.size + heartRate.size + heartRateVariability.size +
+            distance.size + activeCalories.size + totalCalories.size + weight.size +
+            height.size + bloodPressure.size + bloodGlucose.size + oxygenSaturation.size +
+            bodyTemperature.size + skinTemperature.size + respiratoryRate.size +
+            restingHeartRate.size + exercise.size + hydration.size + nutrition.size +
+            basalMetabolicRate.size + bodyFat.size + leanBodyMass.size + bodyWaterMass.size +
+            vo2Max.size + boneMass.size + menstruationFlow.size + menstruationPeriod.size +
+            intermenstrualBleeding.size + ovulationTest.size + cervicalMucus.size +
+            sexualActivity.size + basalBodyTemperature.size
+}
 
 /**
  * Provenance of a Health Connect record: which app wrote it, how it was recorded, and on what
  * device. Lets downstream consumers tell e.g. an automatically-detected session apart from one
  * recorded by gym equipment, and deduplicate records that arrive from multiple source apps.
+ *
+ * [id] / [clientRecordId] / [clientRecordVersion] / [lastModifiedTime] carry record identity so a
+ * consumer can deduplicate, correlate with the source app's own records, and detect updates.
+ * [zoneOffsetSeconds] / [startZoneOffsetSeconds] / [endZoneOffsetSeconds] are the UTC offsets
+ * Health Connect stores, for local-day aggregation on the server. Only the pair that applies to
+ * the record's shape (instant vs interval) is set; the other is null.
  */
 data class RecordMetadata(
     val dataOrigin: String,
     val recordingMethod: String,
     val deviceManufacturer: String? = null,
     val deviceModel: String? = null,
-    val deviceType: Int? = null
+    val deviceType: Int? = null,
+    val id: String = "",
+    val clientRecordId: String? = null,
+    val clientRecordVersion: Long = 0L,
+    val lastModifiedTime: Instant? = null,
+    val zoneOffsetSeconds: Int? = null,
+    val startZoneOffsetSeconds: Int? = null,
+    val endZoneOffsetSeconds: Int? = null,
 )
 
-fun Metadata.toRecordMetadata(): RecordMetadata = RecordMetadata(
-    dataOrigin = dataOrigin.packageName,
-    recordingMethod = when (recordingMethod) {
-        Metadata.RECORDING_METHOD_ACTIVELY_RECORDED -> "actively_recorded"
-        Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED -> "automatically_recorded"
-        Metadata.RECORDING_METHOD_MANUAL_ENTRY -> "manual_entry"
-        else -> "unknown"
-    },
-    deviceManufacturer = device?.manufacturer,
-    deviceModel = device?.model,
-    deviceType = device?.type,
-)
+/**
+ * Health Connect's `InstantRecord` / `IntervalRecord` interfaces are `internal`, so the caller
+ * passes the zone offsets from the concrete record: [zoneOffset] for instant records,
+ * [startZoneOffset] / [endZoneOffset] for interval records.
+ */
+fun Record.toRecordMetadata(
+    zoneOffset: ZoneOffset? = null,
+    startZoneOffset: ZoneOffset? = null,
+    endZoneOffset: ZoneOffset? = null,
+): RecordMetadata {
+    val m = metadata
+    return RecordMetadata(
+        dataOrigin = m.dataOrigin.packageName,
+        recordingMethod = when (m.recordingMethod) {
+            Metadata.RECORDING_METHOD_ACTIVELY_RECORDED -> "actively_recorded"
+            Metadata.RECORDING_METHOD_AUTOMATICALLY_RECORDED -> "automatically_recorded"
+            Metadata.RECORDING_METHOD_MANUAL_ENTRY -> "manual_entry"
+            else -> "unknown"
+        },
+        deviceManufacturer = m.device?.manufacturer,
+        deviceModel = m.device?.model,
+        deviceType = m.device?.type,
+        id = m.id,
+        clientRecordId = m.clientRecordId,
+        clientRecordVersion = m.clientRecordVersion,
+        lastModifiedTime = m.lastModifiedTime,
+        zoneOffsetSeconds = zoneOffset?.totalSeconds,
+        startZoneOffsetSeconds = startZoneOffset?.totalSeconds,
+        endZoneOffsetSeconds = endZoneOffset?.totalSeconds,
+    )
+}
 
 data class StepsData(
     val count: Long,
     val startTime: Instant,
-    val endTime: Instant
+    val endTime: Instant,
+    val metadata: RecordMetadata? = null
 )
 
 data class SleepData(
@@ -188,13 +265,15 @@ data class HeartRateVariabilityData(
 data class DistanceData(
     val meters: Double,
     val startTime: Instant,
-    val endTime: Instant
+    val endTime: Instant,
+    val metadata: RecordMetadata? = null
 )
 
 data class ActiveCaloriesData(
     val calories: Double,
     val startTime: Instant,
-    val endTime: Instant
+    val endTime: Instant,
+    val metadata: RecordMetadata? = null
 )
 
 data class TotalCaloriesData(
@@ -269,6 +348,7 @@ data class RestingHeartRateData(
 
 data class ExerciseData(
     val type: String,
+    val title: String? = null,
     val startTime: Instant,
     val endTime: Instant,
     val duration: Duration,
@@ -319,6 +399,12 @@ data class LeanBodyMassData(
     val metadata: RecordMetadata? = null
 )
 
+data class BodyWaterMassData(
+    val kilograms: Double,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
 data class Vo2MaxData(
     val mlPerKgPerMin: Double,
     val time: Instant,
@@ -327,6 +413,48 @@ data class Vo2MaxData(
 
 data class BoneMassData(
     val kilograms: Double,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class MenstruationFlowData(
+    val flow: Int,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class MenstruationPeriodData(
+    val startTime: Instant,
+    val endTime: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class IntermenstrualBleedingData(
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class OvulationTestData(
+    val result: Int,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class CervicalMucusData(
+    val appearance: Int,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class SexualActivityData(
+    val protectionUsed: Int,
+    val time: Instant,
+    val metadata: RecordMetadata? = null
+)
+
+data class BasalBodyTemperatureData(
+    val celsius: Double,
+    val measurementLocation: Int,
     val time: Instant,
     val metadata: RecordMetadata? = null
 )
@@ -414,10 +542,26 @@ class HealthConnectManager(private val context: Context) {
                 readBodyFatData(startTime, endTime, lastSyncTimestamps[HealthDataType.BODY_FAT]) else emptyList()
             val leanBodyMassData = if (HealthDataType.LEAN_BODY_MASS in enabledTypes)
                 readLeanBodyMassData(startTime, endTime, lastSyncTimestamps[HealthDataType.LEAN_BODY_MASS]) else emptyList()
+            val bodyWaterMassData = if (HealthDataType.BODY_WATER_MASS in enabledTypes)
+                readBodyWaterMassData(startTime, endTime, lastSyncTimestamps[HealthDataType.BODY_WATER_MASS]) else emptyList()
             val vo2MaxData = if (HealthDataType.VO2_MAX in enabledTypes)
                 readVo2MaxData(startTime, endTime, lastSyncTimestamps[HealthDataType.VO2_MAX]) else emptyList()
             val boneMassData = if (HealthDataType.BONE_MASS in enabledTypes)
                 readBoneMassData(startTime, endTime, lastSyncTimestamps[HealthDataType.BONE_MASS]) else emptyList()
+            val menstruationFlowData = if (HealthDataType.MENSTRUATION_FLOW in enabledTypes)
+                readMenstruationFlowData(startTime, endTime, lastSyncTimestamps[HealthDataType.MENSTRUATION_FLOW]) else emptyList()
+            val menstruationPeriodData = if (HealthDataType.MENSTRUATION_PERIOD in enabledTypes)
+                readMenstruationPeriodData(startTime, endTime, lastSyncTimestamps[HealthDataType.MENSTRUATION_PERIOD]) else emptyList()
+            val intermenstrualBleedingData = if (HealthDataType.INTERMENSTRUAL_BLEEDING in enabledTypes)
+                readIntermenstrualBleedingData(startTime, endTime, lastSyncTimestamps[HealthDataType.INTERMENSTRUAL_BLEEDING]) else emptyList()
+            val ovulationTestData = if (HealthDataType.OVULATION_TEST in enabledTypes)
+                readOvulationTestData(startTime, endTime, lastSyncTimestamps[HealthDataType.OVULATION_TEST]) else emptyList()
+            val cervicalMucusData = if (HealthDataType.CERVICAL_MUCUS in enabledTypes)
+                readCervicalMucusData(startTime, endTime, lastSyncTimestamps[HealthDataType.CERVICAL_MUCUS]) else emptyList()
+            val sexualActivityData = if (HealthDataType.SEXUAL_ACTIVITY in enabledTypes)
+                readSexualActivityData(startTime, endTime, lastSyncTimestamps[HealthDataType.SEXUAL_ACTIVITY]) else emptyList()
+            val basalBodyTemperatureData = if (HealthDataType.BASAL_BODY_TEMPERATURE in enabledTypes)
+                readBasalBodyTemperatureData(startTime, endTime, lastSyncTimestamps[HealthDataType.BASAL_BODY_TEMPERATURE]) else emptyList()
 
             Result.success(HealthData(
                 steps = stepsData,
@@ -442,8 +586,16 @@ class HealthConnectManager(private val context: Context) {
                 basalMetabolicRate = basalMetabolicRateData,
                 bodyFat = bodyFatData,
                 leanBodyMass = leanBodyMassData,
+                bodyWaterMass = bodyWaterMassData,
                 vo2Max = vo2MaxData,
-                boneMass = boneMassData
+                boneMass = boneMassData,
+                menstruationFlow = menstruationFlowData,
+                menstruationPeriod = menstruationPeriodData,
+                intermenstrualBleeding = intermenstrualBleedingData,
+                ovulationTest = ovulationTestData,
+                cervicalMucus = cervicalMucusData,
+                sexualActivity = sexualActivityData,
+                basalBodyTemperature = basalBodyTemperatureData
             ))
         } catch (e: CancellationException) {
             throw e
@@ -641,6 +793,12 @@ class HealthConnectManager(private val context: Context) {
             DashboardFormatter::formatWeightKg,
             R.string.dashboard_sub_kg_latest,
         )
+        HealthDataType.BODY_WATER_MASS -> latestMetric(
+            type,
+            readBodyWaterMassData(dayStart, dayEnd, null).maxByOrNull { it.time }?.kilograms,
+            DashboardFormatter::formatWeightKg,
+            R.string.dashboard_sub_kg_latest,
+        )
         HealthDataType.VO2_MAX -> latestMetric(
             type,
             readVo2MaxData(dayStart, dayEnd, null).maxByOrNull { it.time }?.mlPerKgPerMin,
@@ -652,6 +810,60 @@ class HealthConnectManager(private val context: Context) {
             readBoneMassData(dayStart, dayEnd, null).maxByOrNull { it.time }?.kilograms,
             DashboardFormatter::formatWeightKg,
             R.string.dashboard_sub_kg_latest,
+        )
+        HealthDataType.MENSTRUATION_FLOW -> {
+            val latest = readMenstruationFlowData(dayStart, dayEnd, null).maxByOrNull { it.time }
+            DashboardMetric(
+                type,
+                if (latest != null) latest.flow.toString() else DashboardFormatter.NO_DATA,
+                if (latest != null) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.MENSTRUATION_PERIOD -> {
+            val count = readMenstruationPeriodData(dayStart, dayEnd, null).size
+            DashboardMetric(
+                type,
+                if (count > 0) count.toString() else DashboardFormatter.NO_DATA,
+                if (count > 0) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.INTERMENSTRUAL_BLEEDING -> {
+            val count = readIntermenstrualBleedingData(dayStart, dayEnd, null).size
+            DashboardMetric(
+                type,
+                if (count > 0) count.toString() else DashboardFormatter.NO_DATA,
+                if (count > 0) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.OVULATION_TEST -> {
+            val latest = readOvulationTestData(dayStart, dayEnd, null).maxByOrNull { it.time }
+            DashboardMetric(
+                type,
+                if (latest != null) latest.result.toString() else DashboardFormatter.NO_DATA,
+                if (latest != null) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.CERVICAL_MUCUS -> {
+            val latest = readCervicalMucusData(dayStart, dayEnd, null).maxByOrNull { it.time }
+            DashboardMetric(
+                type,
+                if (latest != null) latest.appearance.toString() else DashboardFormatter.NO_DATA,
+                if (latest != null) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.SEXUAL_ACTIVITY -> {
+            val count = readSexualActivityData(dayStart, dayEnd, null).size
+            DashboardMetric(
+                type,
+                if (count > 0) count.toString() else DashboardFormatter.NO_DATA,
+                if (count > 0) R.string.dashboard_sub_today else R.string.dashboard_sub_no_data,
+            )
+        }
+        HealthDataType.BASAL_BODY_TEMPERATURE -> latestMetric(
+            type,
+            readBasalBodyTemperatureData(dayStart, dayEnd, null).maxByOrNull { it.time }?.celsius,
+            DashboardFormatter::formatCelsius,
+            R.string.dashboard_sub_celsius_latest,
         )
     }
 
@@ -708,6 +920,32 @@ class HealthConnectManager(private val context: Context) {
         return readRawTotalCaloriesData(startTime, endTime, null).sumOf { it.calories }
     }
 
+    /**
+     * Local calendar days that overlap the half-open window [startTime, endTime).
+     *
+     * Custom sync ends at midnight of the day after the selected end date.
+     * Mapping that exclusive end with [Instant.atZone] + [LocalDate] alone
+     * includes an empty day where queryStart == queryEnd. Health Connect then
+     * rejects [TimeRangeFilter.between] with "Start time must be before end time".
+     */
+    private fun localDatesOverlappingExclusiveEnd(
+        startTime: Instant,
+        endTime: Instant,
+        zone: ZoneId,
+    ): List<LocalDate> {
+        if (!startTime.isBefore(endTime)) return emptyList()
+        val startLocalDate = startTime.atZone(zone).toLocalDate()
+        val endLocalDate = endTime.minusNanos(1).atZone(zone).toLocalDate()
+        if (endLocalDate.isBefore(startLocalDate)) return emptyList()
+        val dates = mutableListOf<LocalDate>()
+        var current = startLocalDate
+        while (!current.isAfter(endLocalDate)) {
+            dates.add(current)
+            current = current.plusDays(1)
+        }
+        return dates
+    }
+
     private suspend fun readStepsData(
         startTime: Instant,
         endTime: Instant,
@@ -734,7 +972,7 @@ class HealthConnectManager(private val context: Context) {
         return readAllRecords(request)
             .filter { lastSync == null || it.endTime >= lastSync }
             .filter { it.count > 0 }
-            .map { StepsData(count = it.count, startTime = it.startTime, endTime = it.endTime) }
+            .map { StepsData(count = it.count, startTime = it.startTime, endTime = it.endTime, metadata = it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
     }
 
     private suspend fun readBucketedStepsData(
@@ -773,14 +1011,10 @@ class HealthConnectManager(private val context: Context) {
         // Aggregate steps per calendar day (using device timezone) instead of
         // a single multi-day total. This produces clean per-day records that
         // the server can use directly without delta-tracking hacks.
-        val zone = java.time.ZoneId.systemDefault()
+        val zone = ZoneId.systemDefault()
         val result = mutableListOf<StepsData>()
 
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
-
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
 
@@ -788,11 +1022,9 @@ class HealthConnectManager(private val context: Context) {
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            // Skip days entirely before lastSync
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            // Skip empty clamps (exclusive end on midnight) and days before lastSync
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val aggregateRequest = AggregateRequest(
                 metrics = setOf(StepsRecord.COUNT_TOTAL),
@@ -815,12 +1047,14 @@ class HealthConnectManager(private val context: Context) {
             if (daySteps > 0) {
                 result.add(StepsData(
                     count = daySteps,
-                    startTime = dayStart,
+                    // Use the clamped window start, not local midnight: the oldest
+                    // bucket in a lookback window covers only the elapsed part of
+                    // the day, so a midnight start_time would mislabel a partial
+                    // day as a full one. See issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
-
-            currentDate = currentDate.plusDays(1)
         }
 
         return result
@@ -862,7 +1096,7 @@ class HealthConnectManager(private val context: Context) {
                     sessionEndTime = record.endTime,
                     duration = Duration.between(record.startTime, record.endTime),
                     stages = stages,
-                    metadata = record.metadata.toRecordMetadata()
+                    metadata = record.toRecordMetadata(startZoneOffset = record.startZoneOffset, endZoneOffset = record.endZoneOffset)
                 )
             }
     }
@@ -876,7 +1110,7 @@ class HealthConnectManager(private val context: Context) {
         val request = ReadRecordsRequest(recordType = HeartRateRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         val samples = response.flatMap { record ->
-            val metadata = record.metadata.toRecordMetadata()
+            val metadata = record.toRecordMetadata(startZoneOffset = record.startZoneOffset, endZoneOffset = record.endZoneOffset)
             record.samples
                 .filter { lastSync == null || it.time >= lastSync }
                 .map { Triple(it.time, it.beatsPerMinute, metadata) }
@@ -916,7 +1150,7 @@ class HealthConnectManager(private val context: Context) {
         )
         val samples = readAllRecords(request)
             .filter { lastSync == null || it.time >= lastSync }
-            .map { Triple(it.time, it.heartRateVariabilityMillis, it.metadata.toRecordMetadata()) }
+            .map { Triple(it.time, it.heartRateVariabilityMillis, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
 
         if (resolutionMinutes <= 0) {
             return samples.map { (time, value, metadata) ->
@@ -965,7 +1199,7 @@ class HealthConnectManager(private val context: Context) {
         return readAllRecords(request)
             .filter { lastSync == null || it.endTime >= lastSync }
             .filter { it.distance.inMeters > 0.0 }
-            .map { DistanceData(it.distance.inMeters, it.startTime, it.endTime) }
+            .map { DistanceData(it.distance.inMeters, it.startTime, it.endTime, it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
     }
 
     private suspend fun readBucketedDistanceData(
@@ -996,24 +1230,18 @@ class HealthConnectManager(private val context: Context) {
         // Aggregate distance per calendar day (same pattern as steps).
         // If the aggregate returns null (e.g., Google Health/Fit data after the Fitbit rebrand),
         // fall back to summing raw DistanceRecord entries so distance is never silently omitted.
-        val zone = java.time.ZoneId.systemDefault()
+        val zone = ZoneId.systemDefault()
         val result = mutableListOf<DistanceData>()
 
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
-
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
 
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val aggregateRequest = AggregateRequest(
                 metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
@@ -1036,12 +1264,11 @@ class HealthConnectManager(private val context: Context) {
             if (dayDistance > 0.0) {
                 result.add(DistanceData(
                     meters = dayDistance,
-                    startTime = dayStart,
+                    // Clamped window start, not local midnight — see issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
-
-            currentDate = currentDate.plusDays(1)
         }
 
         return result
@@ -1072,7 +1299,7 @@ class HealthConnectManager(private val context: Context) {
         return readAllRecords(request)
             .filter { lastSync == null || it.endTime >= lastSync }
             .filter { it.energy.inKilocalories > 0.0 }
-            .map { ActiveCaloriesData(it.energy.inKilocalories, it.startTime, it.endTime) }
+            .map { ActiveCaloriesData(it.energy.inKilocalories, it.startTime, it.endTime, it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
     }
 
     private suspend fun readBucketedActiveCaloriesData(
@@ -1101,24 +1328,18 @@ class HealthConnectManager(private val context: Context) {
         lastSync: Instant?,
     ): List<ActiveCaloriesData> {
         // Aggregate active calories per calendar day (same pattern as steps/distance)
-        val zone = java.time.ZoneId.systemDefault()
+        val zone = ZoneId.systemDefault()
         val result = mutableListOf<ActiveCaloriesData>()
 
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
-
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
 
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val aggregateRequest = AggregateRequest(
                 metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
@@ -1141,12 +1362,11 @@ class HealthConnectManager(private val context: Context) {
             if (dayCalories > 0.0) {
                 result.add(ActiveCaloriesData(
                     calories = dayCalories,
-                    startTime = dayStart,
+                    // Clamped window start, not local midnight — see issue #72.
+                    startTime = queryStart,
                     endTime = queryEnd
                 ))
             }
-
-            currentDate = currentDate.plusDays(1)
         }
 
         return result
@@ -1176,7 +1396,7 @@ class HealthConnectManager(private val context: Context) {
         )
         return readAllRecords(request)
             .filter { lastSync == null || it.endTime >= lastSync }
-            .map { TotalCaloriesData(it.energy.inKilocalories, it.startTime, it.endTime, it.metadata.toRecordMetadata()) }
+            .map { TotalCaloriesData(it.energy.inKilocalories, it.startTime, it.endTime, it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
     }
 
     private suspend fun readBucketedTotalCaloriesData(
@@ -1204,22 +1424,17 @@ class HealthConnectManager(private val context: Context) {
         endTime: Instant,
         lastSync: Instant?,
     ): List<TotalCaloriesData> {
-        val zone = java.time.ZoneId.systemDefault()
+        val zone = ZoneId.systemDefault()
         val result = mutableListOf<TotalCaloriesData>()
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
 
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val dayCalories = readRawTotalCaloriesData(queryStart, queryEnd, null)
                 .sumOf { it.calories }
@@ -1228,12 +1443,12 @@ class HealthConnectManager(private val context: Context) {
                 result.add(
                     TotalCaloriesData(
                         calories = dayCalories,
-                        startTime = dayStart,
+                        // Clamped window start, not local midnight — see issue #72.
+                        startTime = queryStart,
                         endTime = queryEnd,
                     ),
                 )
             }
-            currentDate = currentDate.plusDays(1)
         }
         return result
     }
@@ -1242,28 +1457,28 @@ class HealthConnectManager(private val context: Context) {
         val request = ReadRecordsRequest(recordType = WeightRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { WeightData(it.weight.inKilograms, it.time, it.metadata.toRecordMetadata()) }
+            .map { WeightData(it.weight.inKilograms, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readHeightData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<HeightData> {
         val request = ReadRecordsRequest(recordType = HeightRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { HeightData(it.height.inMeters, it.time, it.metadata.toRecordMetadata()) }
+            .map { HeightData(it.height.inMeters, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readBloodPressureData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BloodPressureData> {
         val request = ReadRecordsRequest(recordType = BloodPressureRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BloodPressureData(it.systolic.inMillimetersOfMercury, it.diastolic.inMillimetersOfMercury, it.time, it.metadata.toRecordMetadata()) }
+            .map { BloodPressureData(it.systolic.inMillimetersOfMercury, it.diastolic.inMillimetersOfMercury, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readBloodGlucoseData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BloodGlucoseData> {
         val request = ReadRecordsRequest(recordType = BloodGlucoseRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BloodGlucoseData(it.level.inMillimolesPerLiter, it.time, it.metadata.toRecordMetadata()) }
+            .map { BloodGlucoseData(it.level.inMillimolesPerLiter, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readOxygenSaturationData(
@@ -1278,7 +1493,7 @@ class HealthConnectManager(private val context: Context) {
         )
         val samples = readAllRecords(request)
             .filter { lastSync == null || it.time >= lastSync }
-            .map { Triple(it.time, it.percentage.value, it.metadata.toRecordMetadata()) }
+            .map { Triple(it.time, it.percentage.value, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
 
         if (resolutionMinutes <= 0) {
             return samples.map { (time, value, metadata) ->
@@ -1306,7 +1521,7 @@ class HealthConnectManager(private val context: Context) {
         val request = ReadRecordsRequest(recordType = BodyTemperatureRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BodyTemperatureData(it.temperature.inCelsius, it.time, it.metadata.toRecordMetadata()) }
+            .map { BodyTemperatureData(it.temperature.inCelsius, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readSkinTemperatureData(
@@ -1328,7 +1543,7 @@ class HealthConnectManager(private val context: Context) {
                         deltaCelsius = delta.delta.inCelsius,
                         baselineCelsius = record.baseline?.inCelsius,
                         measurementLocation = record.measurementLocation,
-                        metadata = record.metadata.toRecordMetadata(),
+                        metadata = record.toRecordMetadata(startZoneOffset = record.startZoneOffset, endZoneOffset = record.endZoneOffset),
                     )
                 }
         }
@@ -1368,7 +1583,7 @@ class HealthConnectManager(private val context: Context) {
         )
         val samples = readAllRecords(request)
             .filter { lastSync == null || it.time >= lastSync }
-            .map { Triple(it.time, it.rate, it.metadata.toRecordMetadata()) }
+            .map { Triple(it.time, it.rate, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
 
         if (resolutionMinutes <= 0) {
             return samples.map { (time, value, metadata) ->
@@ -1396,7 +1611,7 @@ class HealthConnectManager(private val context: Context) {
         val request = ReadRecordsRequest(recordType = RestingHeartRateRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { RestingHeartRateData(it.beatsPerMinute, it.time, it.metadata.toRecordMetadata()) }
+            .map { RestingHeartRateData(it.beatsPerMinute, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readExerciseData(
@@ -1416,6 +1631,7 @@ class HealthConnectManager(private val context: Context) {
                 val cadenceMetrics = if (includeSteps) readStepsCadenceMetrics(it.startTime, it.endTime) else StepsCadenceMetrics()
                 ExerciseData(
                     type = it.exerciseType.toString(),
+                    title = it.title?.takeIf { title -> title.isNotBlank() },
                     startTime = it.startTime,
                     endTime = it.endTime,
                     duration = duration,
@@ -1424,7 +1640,7 @@ class HealthConnectManager(private val context: Context) {
                     avgCadenceSpm = cadenceMetrics.avg ?: deriveAverageCadenceSpm(steps, duration),
                     maxCadenceSpm = cadenceMetrics.max,
                     strideLengthMeters = deriveStrideLengthMeters(distanceMeters, steps),
-                    metadata = it.metadata.toRecordMetadata()
+                    metadata = it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)
                 )
             }
     }
@@ -1525,7 +1741,7 @@ class HealthConnectManager(private val context: Context) {
         )
         return readAllRecords(request)
             .filter { lastSync == null || it.endTime >= lastSync }
-            .map { HydrationData(it.volume.inLiters, it.startTime, it.endTime, it.metadata.toRecordMetadata()) }
+            .map { HydrationData(it.volume.inLiters, it.startTime, it.endTime, it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
     }
 
     private suspend fun readBucketedHydrationData(
@@ -1555,26 +1771,21 @@ class HealthConnectManager(private val context: Context) {
     ): List<HydrationData> {
         val zone = ZoneId.systemDefault()
         val result = mutableListOf<HydrationData>()
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
 
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val dayLiters = readRawHydrationData(queryStart, queryEnd, null).sumOf { it.liters }
             if (dayLiters > 0.0) {
-                result.add(HydrationData(dayLiters, dayStart, queryEnd))
+                // Clamped window start, not local midnight — see issue #72.
+                result.add(HydrationData(dayLiters, queryStart, queryEnd))
             }
-            currentDate = currentDate.plusDays(1)
         }
         return result
     }
@@ -1615,7 +1826,7 @@ class HealthConnectManager(private val context: Context) {
                     name = it.name,
                     startTime = it.startTime,
                     endTime = it.endTime,
-                    metadata = it.metadata.toRecordMetadata(),
+                    metadata = it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset),
                 )
             }
     }
@@ -1659,26 +1870,21 @@ class HealthConnectManager(private val context: Context) {
     ): List<NutritionData> {
         val zone = ZoneId.systemDefault()
         val result = mutableListOf<NutritionData>()
-        val startLocalDate = startTime.atZone(zone).toLocalDate()
-        val endLocalDate = endTime.atZone(zone).toLocalDate()
 
-        var currentDate = startLocalDate
-        while (!currentDate.isAfter(endLocalDate)) {
+        for (currentDate in localDatesOverlappingExclusiveEnd(startTime, endTime, zone)) {
             val dayStart = currentDate.atStartOfDay(zone).toInstant()
             val dayEnd = currentDate.plusDays(1).atStartOfDay(zone).toInstant()
             val queryStart = if (dayStart.isBefore(startTime)) startTime else dayStart
             val queryEnd = if (dayEnd.isAfter(endTime)) endTime else dayEnd
 
-            if (lastSync != null && queryEnd.isBefore(lastSync)) {
-                currentDate = currentDate.plusDays(1)
-                continue
-            }
+            if (!queryStart.isBefore(queryEnd)) continue
+            if (lastSync != null && queryEnd.isBefore(lastSync)) continue
 
             val dayRecords = readRawNutritionData(queryStart, queryEnd, null)
             if (dayRecords.isNotEmpty()) {
-                result.add(mergeNutritionRecords(dayRecords, dayStart, queryEnd))
+                // Clamped window start, not local midnight — see issue #72.
+                result.add(mergeNutritionRecords(dayRecords, queryStart, queryEnd))
             }
-            currentDate = currentDate.plusDays(1)
         }
         return result
     }
@@ -1687,35 +1893,91 @@ class HealthConnectManager(private val context: Context) {
         val request = ReadRecordsRequest(recordType = BasalMetabolicRateRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BasalMetabolicRateData(it.basalMetabolicRate.inWatts, it.time, it.metadata.toRecordMetadata()) }
+            .map { BasalMetabolicRateData(it.basalMetabolicRate.inWatts, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readBodyFatData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BodyFatData> {
         val request = ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BodyFatData(it.percentage.value, it.time, it.metadata.toRecordMetadata()) }
+            .map { BodyFatData(it.percentage.value, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readLeanBodyMassData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<LeanBodyMassData> {
         val request = ReadRecordsRequest(recordType = LeanBodyMassRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { LeanBodyMassData(it.mass.inKilograms, it.time, it.metadata.toRecordMetadata()) }
+            .map { LeanBodyMassData(it.mass.inKilograms, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readBodyWaterMassData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BodyWaterMassData> {
+        val request = ReadRecordsRequest(recordType = BodyWaterMassRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        val response = readAllRecords(request)
+        return response.filter { lastSync == null || it.time >= lastSync }
+            .map { BodyWaterMassData(it.mass.inKilograms, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readVo2MaxData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<Vo2MaxData> {
         val request = ReadRecordsRequest(recordType = Vo2MaxRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { Vo2MaxData(it.vo2MillilitersPerMinuteKilogram, it.time, it.metadata.toRecordMetadata()) }
+            .map { Vo2MaxData(it.vo2MillilitersPerMinuteKilogram, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun readBoneMassData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BoneMassData> {
         val request = ReadRecordsRequest(recordType = BoneMassRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
         val response = readAllRecords(request)
         return response.filter { lastSync == null || it.time >= lastSync }
-            .map { BoneMassData(it.mass.inKilograms, it.time, it.metadata.toRecordMetadata()) }
+            .map { BoneMassData(it.mass.inKilograms, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readMenstruationFlowData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<MenstruationFlowData> {
+        val request = ReadRecordsRequest(recordType = MenstruationFlowRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { MenstruationFlowData(it.flow, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readMenstruationPeriodData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<MenstruationPeriodData> {
+        val request = ReadRecordsRequest(recordType = MenstruationPeriodRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.endTime >= lastSync }
+            .map { MenstruationPeriodData(it.startTime, it.endTime, it.toRecordMetadata(startZoneOffset = it.startZoneOffset, endZoneOffset = it.endZoneOffset)) }
+    }
+
+    private suspend fun readIntermenstrualBleedingData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<IntermenstrualBleedingData> {
+        val request = ReadRecordsRequest(recordType = IntermenstrualBleedingRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { IntermenstrualBleedingData(it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readOvulationTestData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<OvulationTestData> {
+        val request = ReadRecordsRequest(recordType = OvulationTestRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { OvulationTestData(it.result, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readCervicalMucusData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<CervicalMucusData> {
+        val request = ReadRecordsRequest(recordType = CervicalMucusRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { CervicalMucusData(it.appearance, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readSexualActivityData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<SexualActivityData> {
+        val request = ReadRecordsRequest(recordType = SexualActivityRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { SexualActivityData(it.protectionUsed, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
+    }
+
+    private suspend fun readBasalBodyTemperatureData(startTime: Instant, endTime: Instant, lastSync: Instant?): List<BasalBodyTemperatureData> {
+        val request = ReadRecordsRequest(recordType = BasalBodyTemperatureRecord::class, timeRangeFilter = TimeRangeFilter.between(startTime, endTime))
+        return readAllRecords(request)
+            .filter { lastSync == null || it.time >= lastSync }
+            .map { BasalBodyTemperatureData(it.temperature.inCelsius, it.measurementLocation, it.time, it.toRecordMetadata(zoneOffset = it.zoneOffset)) }
     }
 
     private suspend fun <T : Record> readAllRecords(request: ReadRecordsRequest<T>): List<T> {
@@ -1803,7 +2065,7 @@ class HealthConnectManager(private val context: Context) {
     }
 
     companion object {
-        private const val LOOKBACK_HOURS = 48L
+        internal const val LOOKBACK_HOURS = 48L
 
         private const val RATE_LIMIT_MAX_ATTEMPTS = 4
         private const val RATE_LIMIT_INITIAL_DELAY_MS = 1_000L
@@ -1872,8 +2134,16 @@ class HealthConnectManager(private val context: Context) {
             HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
             HealthPermission.getReadPermission(BodyFatRecord::class),
             HealthPermission.getReadPermission(LeanBodyMassRecord::class),
+            HealthPermission.getReadPermission(BodyWaterMassRecord::class),
             HealthPermission.getReadPermission(Vo2MaxRecord::class),
             HealthPermission.getReadPermission(BoneMassRecord::class),
+            HealthPermission.getReadPermission(MenstruationFlowRecord::class),
+            HealthPermission.getReadPermission(MenstruationPeriodRecord::class),
+            HealthPermission.getReadPermission(IntermenstrualBleedingRecord::class),
+            HealthPermission.getReadPermission(OvulationTestRecord::class),
+            HealthPermission.getReadPermission(CervicalMucusRecord::class),
+            HealthPermission.getReadPermission(SexualActivityRecord::class),
+            HealthPermission.getReadPermission(BasalBodyTemperatureRecord::class),
             "android.permission.health.READ_HEALTH_DATA_HISTORY"
         )
     }

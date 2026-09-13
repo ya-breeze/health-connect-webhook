@@ -1,5 +1,8 @@
 # Health Connect to Webhook
 
+An Android app that forwards health data from Google Fit, Samsung Health, Fitbit,
+and other apps to your webhooks or local tools via Health Connect.
+
 <table role="presentation" border="0" cellspacing="0" cellpadding="0">
   <tr>
     <td valign="middle"><a href="https://play.google.com/store/apps/details?id=com.hcwebhook.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="90"></a></td>
@@ -7,141 +10,42 @@
     <td valign="middle"><a href="https://apps.apple.com/app/health-webhook/id6763619597"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="60"></a></td>
   </tr>
 </table>
+
+**Get it from the [Google Play Store](https://play.google.com/store/apps/details?id=com.hcwebhook.app) or the [App Store](https://apps.apple.com/app/health-webhook/id6763619597).**
 
 ![HC Webhook](image.png)
 
-An Android app that bridges Google Fit, Samsung Health, Fitbit, and other health apps to your webhooks or local tools via Health Connect APIs, enabling seamless integration with your custom endpoints, agents, and services.
+## How it works
 
-## Overview
-
-HC Webhook connects Google Health Connect to your webhook infrastructure and local automation tools. Health Connect aggregates health data from apps like Google Fit, Samsung Health, Fitbit, and more into a unified API. This app reads that aggregated data and sends it to your configured webhook URLs on your chosen sync strategy (interval-based or scheduled times), or exposes realtime JSON through an optional local HTTP server for devices and tools on your network.
-
-## How It Works
-
-1. **Health Apps** (Google Fit, Samsung Health, Fitbit, etc.) sync data to **Health Connect**
-2. **Health Connect** aggregates all health data into a unified API
-3. **HC Webhook** reads data from Health Connect using your selected sync mode (interval or scheduled), manual sync, or local HTTP request
-4. **HC Webhook** sends the data to your configured **webhook URLs** and can optionally serve realtime JSON over your local network
-5. Your **custom services, local agents, or automation tools** receive and process the health data
-
-## Supported Health Apps
-
-Health Connect aggregates data from these popular health and fitness apps:
-
-- **Google Fit** - Activity tracking, workouts, and health metrics
-- **Samsung Health** - Comprehensive health and fitness tracking
-- **Fitbit** - Activity, sleep, and heart rate data
-- **MyFitnessPal** - Nutrition and calorie tracking
-- **Strava** - Running and cycling activities
-- **Nike Run Club** - Running activities and workouts
-- **Withings** - Weight, blood pressure, and activity tracking
-- **Garmin Connect** - Fitness and health data from Garmin devices
-- **Polar** - Heart rate and fitness tracking
-- **Oura** - Sleep, activity, and recovery data
-- **And many more...** - Any app that syncs to Health Connect
-
-> **Note**: You don't need to install all these apps. Just ensure the apps you use are syncing their data to Health Connect, and HC Webhook will automatically access that unified data.
+1. Your health apps sync to **Health Connect**, which aggregates them into one API.
+2. **HC Webhook** reads that data on an interval, on a schedule, or on demand.
+3. It `POST`s the data to your webhook URLs (JSON or Protobuf/gRPC) and can serve
+   realtime JSON over your local network.
+4. Your services, agents, or automation tools receive it.
 
 ## Screenshots
 
-| Home screen | Data Types | Webhooks URLs | Webhook Logs |
-| :---------: | :--------: | :-----------: | :----------: |
-| <img src="screenshots/1.png" width="240" alt="Home screen"> | <img src="screenshots/2.png" width="240" alt="Data Types"> | <img src="screenshots/3.png" width="240" alt="Webhooks URLs"> | <img src="screenshots/4.png" width="240" alt="Webhook Logs"> |
+| Home | Data Types | Webhook URLs | Logs |
+| :--: | :--: | :--: | :--: |
+| <img src="screenshots/1.png" width="200" alt="Home"> | <img src="screenshots/2.png" width="200" alt="Data Types"> | <img src="screenshots/3.png" width="200" alt="Webhook URLs"> | <img src="screenshots/4.png" width="200" alt="Logs"> |
 
 ## Features
 
-- 🔄 **Flexible Background Sync** - Choose between interval-based sync (WorkManager) or fixed-time scheduled syncs (AlarmManager)
-- 🎯 **Selective Data Types** - Choose which health data types to sync (24 supported types)
-- 🔗 **Multiple Webhooks** - Send data to multiple webhook URLs simultaneously
-- 🖥️ **Local HTTP Server** - Expose realtime Health Connect JSON on your local network for agents, scripts, and automation tools
-- 📊 **Manual Sync** - Trigger immediate data synchronization on demand
-- 🌍 **Multi-language Support** - Fully localized in 10 languages with manual override support
-- 📝 **Webhook Logs** - View detailed logs of all webhook requests and responses
-- 🔐 **Permission Management** - Granular Health Connect permission handling
-- 💾 **Settings Backup** - Export/import webhook configs, data type selections, and sync schedule
-- 🎨 **Modern UI** - Built with Jetpack Compose and Material 3 design
-- ⚡ **Real-time Status** - Visual indicators for permission status and sync state
-- 💬 **Feedback** - Easy access to provide feedback and suggestions through the app menu
+Interval or scheduled sync · 31 health data types · multiple webhooks · JSON or
+Protobuf/gRPC delivery · local HTTP server · webhook logs · settings
+backup/restore · 10 languages. Full list, supported apps, and data types:
+**[docs/features.md](docs/features.md)**.
 
-## API reference
+Interval and scheduled syncs keep dedicated last-successful automatic progress.
+After a gap longer than the normal 48-hour window, they replay missed delivery
+in 24-hour slices (up to 30 days). Manual sync and local API activity can update
+the displayed last-sync status, but never move this automatic catch-up cursor.
 
-Integrations and automations can rely on these specs (kept in sync with the app code):
+## Install
 
-- **[Webhook payload](docs/webhook.md)** — `POST` JSON body: root fields, every data-type array, incremental sync vs explicit ranges, units, and examples.
-- **[Local HTTP server](docs/local-http.md)** — `GET` endpoints (`/`, `/latest`, `/ping`), query parameters, listen binding, default port **8787**, and how pull-based reads differ from webhook sync.
+### Stable (recommended)
 
-## Supported Languages
-
-The app is fully localized and supports 10 languages. You can manually override the app language from the **About** screen:
-
-- 🇬🇧 English (Default)
-- 🇮🇳 Tamil
-- 🇫🇷 French
-- 🇩🇪 German
-- 🇪🇸 Spanish
-- 🇵🇹 Portuguese
-- 🇨🇳 Chinese (Simplified)
-- 🇯🇵 Japanese
-- 🇰🇷 Korean
-- 🇮🇹 Italian
-
-## Supported Health Data Types
-
-The app supports reading and syncing the following health data types from Health Connect:
-
-1. **Steps** - Daily step count
-2. **Sleep** - Sleep sessions with stages
-3. **Heart Rate** - Heart rate measurements
-4. **Heart Rate Variability (RMSSD)** - Heart rate variability in milliseconds
-5. **Distance** - Distance traveled
-6. **Active Calories** - Calories burned during activity
-7. **Total Calories** - Total calories burned
-8. **Weight** - Body weight measurements
-9. **Height** - Height measurements
-10. **Blood Pressure** - Systolic and diastolic readings
-11. **Blood Glucose** - Blood glucose levels
-12. **Oxygen Saturation** - SpO2 measurements
-13. **Body Temperature** - Body temperature readings
-14. **Skin Temperature** - Skin temperature deltas from wearables (for example overnight sleep readings from supported watches); each synced sample includes delta from baseline when Health Connect provides it
-15. **Respiratory Rate** - Breathing rate measurements
-16. **Resting Heart Rate** - Resting heart rate data
-17. **Exercise Sessions** - Workout and exercise data
-18. **Hydration** - Water intake tracking
-19. **Nutrition** - Nutritional information (calories, protein, carbs, fat, sugar, sodium, dietary fiber, name)
-20. **Basal Metabolic Rate** - Basal energy expenditure
-21. **Body Fat** - Body fat percentage measurements
-22. **Lean Body Mass** - Lean body mass measurements
-23. **VO2 Max** - Cardiorespiratory fitness measurements
-24. **Bone Mass** - Bone mass measurements
-
-## Requirements
-
-- **Android 8.0 (API 26)** or higher
-- **Google Health Connect** app installed and set up
-- **Internet connection** for webhook delivery
-
-> **Note**: Health Connect aggregates data from multiple health apps (Google Fit, Samsung Health, Fitbit, etc.). You don't need to directly connect to these apps - just ensure they're syncing to Health Connect, and this app will automatically access that unified data.
-
-## Installation
-
-### From Source
-
-1. Clone this repository:
-
-```bash
-git clone https://github.com/mcnaveen/health-connect-webhook
-cd health-connect-webhook
-```
-
-2. Open the project in Android Studio (Arctic Fox or later recommended)
-
-3. Sync Gradle dependencies
-
-4. Build and run the app on your device or emulator
-
-### Downloads
-
-#### Easy (Recommended)
+Store builds — tested releases, long-term support:
 
 <table role="presentation" border="0" cellspacing="0" cellpadding="0">
   <tr>
@@ -151,233 +55,49 @@ cd health-connect-webhook
   </tr>
 </table>
 
-### Install via Obtainium
+### Beta (rolling release)
 
-You can easily install and update **HC Webhook** using [Obtainium](https://github.com/ImranR98/Obtainium).
+Android APKs straight from GitHub Releases via
+[Obtainium](https://github.com/ImranR98/Obtainium) — newest features first, more
+churn. Add app URL: `https://github.com/mcnaveen/health-connect-webhook`.
 
-1.  Install **Obtainium** on your Android device.
-2.  Tap **"Add App"**.
-3.  Enter the repository URL: `https://github.com/mcnaveen/health-connect-webhook`
-4.  Allow Obtainium to scan for releases.
-5.  Tap **Install** / **Update**.
+## Requirements
 
+- Android 8.0 (API 26) or higher
+- Google Health Connect installed and set up
+- Internet connection for webhook delivery
 
-### Building the APK
+## Documentation
 
-```bash
-./gradlew assembleDebug
-```
+| Doc | Covers |
+| --- | --- |
+| [docs/features.md](docs/features.md) | Full feature list, supported apps, languages, data types |
+| [docs/usage.md](docs/usage.md) | Setup, sync modes, local server, feedback, limitations |
+| [docs/api-reference.md](docs/api-reference.md) | Payload schema, webhook / gRPC delivery, local HTTP server |
+| [docs/webhook.md](docs/webhook.md) | Full field tables, units, examples |
+| [docs/local-http.md](docs/local-http.md) | Local HTTP `GET` API |
+| [docs/building.md](docs/building.md) | Build, project structure, architecture, contributing |
 
-The APK will be generated at: `app/build/outputs/apk/debug/app-debug.apk`
+## Privacy
 
-## Usage
-
-### Initial Setup
-
-1. **Install Health Connect** (if not already installed)
-   - Download from [Google Play Store](https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata)
-
-2. **Grant Permissions**
-   - Open the app and tap "Grant Permissions"
-   - Select the health data types you want to sync
-   - Grant the required permissions in Health Connect
-
-3. **Configure Webhooks**
-   - Add one or more webhook URLs (must start with `http://` or `https://`)
-   - Select which data types to sync
-   - Choose sync mode:
-     - **Interval Mode**: set your preferred sync interval (minimum 15 minutes)
-     - **Scheduled Mode**: configure one or more fixed times of day
-   - Optionally enable **Local HTTP Server** and choose a port for local network access
-
-4. **Save Configuration**
-   - Tap "Save Configuration" to start automatic syncing
-
-### Manual Sync
-
-- Tap the "Sync Now" button in the Manual Sync section to immediately sync all enabled data types to your webhooks
-
-### Viewing Logs
-
-- Access webhook logs from the menu (⋮) → "Webhook Log"
-- View detailed information about each webhook request, including timestamps, status codes, and response data
-
-### Local HTTP Server
-
-Enable the local HTTP server from the configuration screen to expose Health Connect JSON to tools on the same network. The app keeps the server active through a **foreground service** while the feature is enabled. Only **GET** is supported; there is no authentication—use on a trusted LAN.
-
-Quick endpoint map (details in **[docs/local-http.md](docs/local-http.md)**):
-
-- `http://<device-ip>:<port>/` — On-demand read from Health Connect (default **48-hour** window; optional `?days=N` for **N** full days).
-- `http://<device-ip>:<port>/latest` — Last published JSON from a successful `GET /` or webhook sync, or `{"status":"no_data"}`.
-- `http://<device-ip>:<port>/ping` — `{"status":"ok"}` health check.
-
-Default port is **8787** (configurable **1024–65535**). Example: `http://192.168.1.25:8787/`.
-
-> **Note**: Local HTTP access depends on Android background execution, Wi-Fi availability, and device battery optimization settings. For best reliability, keep the phone awake/charging or exclude HC Webhook from aggressive battery optimization on devices that restrict foreground services.
-
-### Providing Feedback
-
-- Access the feedback form from the menu (⋮) → "Feedback"
-- Share your thoughts, suggestions, or report issues directly through the feedback portal
-
-## Configuration
-
-### Sync Interval
-
-- **Interval Mode** (WorkManager)
-  - Minimum: 15 minutes
-  - Recommended: 30-60 minutes for most use cases
-- **Scheduled Mode** (AlarmManager)
-  - Sync at specific times of day (default: Morning 08:00 and Evening 21:00)
-  - Add, remove, and toggle individual schedule entries
-  - Uses exact alarms when available (Android 12+ permission dependent), with safe fallback
-
-### Webhook format
-
-Delivery is **`POST`** with **`Content-Type: application/json; charset=utf-8`**. The body is one JSON object: always **`timestamp`** (when the payload was built) and **`app_version`**, plus optional **snake_case** arrays per data type (each key omitted if there are no records in that batch). Background sync reads a rolling **48-hour** window and, by default, only records **new since the last successful sync** per type (first run has no prior watermark).
-
-Full field tables, units, nutrition/skin-temperature notes, and examples: **[docs/webhook.md](docs/webhook.md)**.
-
-> **Note**: Webhook delivery includes short retry handling (up to 3 attempts with exponential backoff). If delivery still fails, data is retried on the next successful sync trigger (manual, interval, or scheduled).
-
-The local server returns the **same JSON schema** via **`GET`**; semantics (incremental webhook vs on-demand full-window `GET /`) are described in **[docs/local-http.md](docs/local-http.md)**.
-
-### Data Privacy
-
-- All health data remains on your device until explicitly sent to your configured webhooks
-- The app only reads data that you explicitly grant permission for
-- No data is sent to third-party services except your configured webhooks
-- If the local HTTP server is enabled, devices on the same local network can request the exposed JSON endpoint
-- You can revoke permissions at any time through Android settings
-
-## Known Limitations
-
-- ⚠️ **Offline Handling** - The app attempts to retry failed webhook requests briefly (3 retries). If the internet is unavailable, the sync fails safely and data is retried on the next successful sync trigger (manual, interval, or scheduled).
-- 🕒 **48-Hour Lookback** - To ensure performance and relevance, the app scans for health data within a rolling 48-hour window. Data older than 48 hours may not be synced if the app was not running or configured during that time.
-- 🔋 **Local Server Reliability** - The local HTTP server runs as a foreground service, but availability can still be affected by Doze mode, Wi-Fi sleep, and aggressive OEM battery optimization.
-
-## Technical Details
-
-### Architecture
-
-- **Language**: Kotlin
-- **UI Framework**: Jetpack Compose
-- **Health Data**: Health Connect SDK (AndroidX)
-- **Background Work**: WorkManager
-- **Scheduled Alarms**: AlarmManager (exact alarms where available)
-- **Networking**: OkHttp
-- **Local Server**: Foreground service with a lightweight HTTP socket listener
-- **Serialization**: Kotlinx Serialization
-
-### Key Components
-
-- `MainActivity` - Main Entry Point & Navigation Host
-- `HealthConnectManager` - Handles Health Connect data reading
-- `SyncManager` - Manages data synchronization logic
-- `SyncWorker` - Background worker for periodic syncing
-- `ScheduledSyncManager` - Manages AlarmManager schedules for fixed-time syncing
-- `ScheduledSyncReceiver` - Receives alarm broadcasts and triggers scheduled syncs
-- `WebhookManager` - Handles webhook HTTP requests
-- `LocalHttpServerService` - Foreground service that keeps the local HTTP server running
-- `LocalHttpServerManager` - Handles local HTTP socket binding, request parsing, and JSON responses
-- `PreferencesManager` - Manages app configuration and preferences
-- `ConfigurationScreen` - Main settings UI
-- `LogsScreen` - Displays webhook request/response logs
-- `AboutScreen` - App info, feedback links, and settings export/import
-
-### Permissions
-
-The app requires the following permissions:
-
-- Health Connect read permissions (for each selected data type)
-- `READ_HEALTH_DATA_IN_BACKGROUND` - For background data access
-- `READ_HEALTH_DATA_HISTORY` - To read historical records within the supported lookback window
-- `INTERNET` - For webhook delivery and local HTTP server access
-- `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` - To keep the local HTTP server active in the background
-- `RECEIVE_BOOT_COMPLETED` - To restore scheduled syncs after reboot/app update
-- `SCHEDULE_EXACT_ALARM` - For accurate scheduled sync times on supported Android versions
-
-## Development
-
-### Project Structure
-
-```
-docs/
-├── webhook.md      # Webhook POST JSON schema
-├── local-http.md   # Local HTTP GET API
-app/
-├── src/
-│   ├── main/
-│   │   ├── java/com/hcwebhook/app/
-│   │   │   ├── MainActivity.kt          # Main Entry Point
-│   │   │   ├── HCWebhookApplication.kt  # Application Class
-│   │   │   ├── HealthConnectManager.kt  # Health Connect Logic
-│   │   │   ├── SyncManager.kt           # Sync Logic & Scheduling
-│   │   │   ├── SyncWorker.kt            # WorkManager Background Task
-│   │   │   ├── WebhookManager.kt        # HTTP Client
-│   │   │   ├── LocalHttpServerService.kt # Local HTTP Foreground Service
-│   │   │   ├── LocalTcpServerManager.kt # Local HTTP Socket Server
-│   │   │   ├── PreferencesManager.kt    # DataStore Preferences
-│   │   │   ├── ScheduledSyncManager.kt  # Alarm Manager Logic
-│   │   │   ├── ScheduledSyncReceiver.kt # Broadcast Receiver
-│   │   │   ├── components/              # UI Components
-│   │   │   ├── screens/                 # Composable Screens
-│   │   │   └── ui/                      # Theme & Color
-│   │   └── res/                         # Resources
-└── build.gradle.kts                     # App-level build config
-```
-
-### Building
-
-```bash
-# Debug build
-./gradlew assembleDebug
-
-# Release build
-./gradlew assembleRelease
-```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'feat: Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Health data stays on your device until sent to your configured webhooks. Nothing
+goes to third parties. You control which data types sync and where. Revoke
+permissions any time in Android settings.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html) (AGPL-3.0). The full license text is in [LICENSE](LICENSE).
-
-You may read the source, modify it, and publish your changes, subject to the AGPL (including source-sharing and notice requirements).
-
-**Commercial redistribution on the Apple App Store or Google Play Store** is addressed in [LICENSE.ADDENDUM](LICENSE.ADDENDUM): it requires a separate commercial license from the copyright holder; see that file for details.
-
-SPDX-License-Identifier: AGPL-3.0-only
-
-## Privacy & Security
-
-- HC Webhook does not collect, store, or transmit any personal data to third-party services
-- All health data remains on your device until sent to your configured webhooks
-- Webhook URLs are stored locally on your device
-- You have full control over which data types are synced and where they are sent
+[AGPL-3.0-only](https://www.gnu.org/licenses/agpl-3.0.html) — see [LICENSE](LICENSE).
+Commercial redistribution on the App Store or Google Play requires a separate
+commercial license; see [LICENSE.ADDENDUM](LICENSE.ADDENDUM).
 
 ## Support
 
-For issues, feature requests, or questions, you can:
-
-- Open an issue on GitHub
-- Provide feedback directly through the app: Menu (⋮) → "Feedback" or visit [https://hc-webhook.feedbackjar.com/](https://hc-webhook.feedbackjar.com/)
+- [Open an issue](https://github.com/mcnaveen/health-connect-webhook/issues)
+- In-app: **About** → **Provide Feedback**
+- Feature board: [hc-webhook.feedbackjar.com](https://hc-webhook.feedbackjar.com/)
 
 ## Acknowledgments
 
-- Built with [Health Connect](https://developer.android.com/guide/health-and-fitness/health-connect) by Google
-- UI designed with [Jetpack Compose](https://developer.android.com/jetpack/compose)
-- Powered by [WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager) for reliable background processing
-
----
-
-**Note**: This app requires Health Connect to be installed and properly configured on your device. Health Connect is available on Android 14+ devices or can be installed from the Play Store on compatible devices.
+Built with [Health Connect](https://developer.android.com/guide/health-and-fitness/health-connect),
+[Jetpack Compose](https://developer.android.com/jetpack/compose), and
+[WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager).

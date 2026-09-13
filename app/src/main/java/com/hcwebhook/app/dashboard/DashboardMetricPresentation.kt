@@ -49,6 +49,7 @@ object DashboardMetricPresentation {
         HealthDataType.TOTAL_CALORIES -> style(Icons.Filled.LocalFireDepartment, IconBackgroundRed, IconTintRed)
         HealthDataType.WEIGHT,
         HealthDataType.LEAN_BODY_MASS,
+        HealthDataType.BODY_WATER_MASS,
         HealthDataType.BONE_MASS -> style(Icons.Filled.Scale, IconBackgroundBlue, IconTintBlue)
         HealthDataType.HEIGHT -> style(Icons.Filled.Speed, IconBackgroundGreen, IconTintGreen)
         HealthDataType.BLOOD_PRESSURE -> style(Icons.Filled.MonitorHeart, IconBackgroundRed, IconTintRed)
@@ -63,6 +64,13 @@ object DashboardMetricPresentation {
         HealthDataType.BASAL_METABOLIC_RATE -> style(Icons.Filled.LocalFireDepartment, IconBackgroundOrange, IconTintOrange)
         HealthDataType.BODY_FAT -> style(Icons.Filled.Spa, IconBackgroundPurple, IconTintPurple)
         HealthDataType.VO2_MAX -> style(Icons.Filled.FitnessCenter, IconBackgroundGreen, IconTintGreen)
+        HealthDataType.MENSTRUATION_FLOW,
+        HealthDataType.MENSTRUATION_PERIOD,
+        HealthDataType.INTERMENSTRUAL_BLEEDING,
+        HealthDataType.OVULATION_TEST,
+        HealthDataType.CERVICAL_MUCUS,
+        HealthDataType.SEXUAL_ACTIVITY -> style(Icons.Filled.Favorite, IconBackgroundRed, IconTintRed)
+        HealthDataType.BASAL_BODY_TEMPERATURE -> style(Icons.Filled.Thermostat, IconBackgroundOrange, IconTintOrange)
     }
 
     private fun style(icon: ImageVector, background: Color, tint: Color) =

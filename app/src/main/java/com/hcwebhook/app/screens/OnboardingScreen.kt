@@ -37,6 +37,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,7 +54,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(onFinish: () -> Unit) {
-    val pageCount = if (FlavorUtils.isPlayStore) 4 else 3
+    val pageCount = if (FlavorUtils.isPlayStore) 5 else 4
     val lastPage = pageCount - 1
     val pagerState = rememberPagerState(pageCount = { pageCount })
     val scope = rememberCoroutineScope()
@@ -144,12 +145,46 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                 .statusBarsPadding()
         ) { page ->
             when (page) {
-                0 -> WelcomePage()
-                1 -> DataTypesPage()
-                2 -> PrivacyPage()
-                3 -> ThankYouPage()
+                0 -> DisclaimerPage()
+                1 -> WelcomePage()
+                2 -> DataTypesPage()
+                3 -> PrivacyPage()
+                4 -> ThankYouPage()
             }
         }
+    }
+}
+
+@Composable
+private fun DisclaimerPage() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Warning,
+            contentDescription = null,
+            modifier = Modifier.size(72.dp),
+            tint = Color(0xFFFFB300)
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = stringResource(R.string.medical_disclaimer_title),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.medical_disclaimer_desc),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -254,6 +289,7 @@ private fun DataTypesPage() {
                 HealthDataType.HEIGHT,
                 HealthDataType.BODY_FAT,
                 HealthDataType.LEAN_BODY_MASS,
+                HealthDataType.BODY_WATER_MASS,
                 HealthDataType.BONE_MASS,
                 HealthDataType.BASAL_METABOLIC_RATE,
                 HealthDataType.VO2_MAX
@@ -261,6 +297,15 @@ private fun DataTypesPage() {
             stringResource(R.string.onboarding_group_nutrition) to listOf(
                 HealthDataType.NUTRITION,
                 HealthDataType.HYDRATION
+            ),
+            stringResource(R.string.onboarding_group_cycle_tracking) to listOf(
+                HealthDataType.MENSTRUATION_FLOW,
+                HealthDataType.MENSTRUATION_PERIOD,
+                HealthDataType.INTERMENSTRUAL_BLEEDING,
+                HealthDataType.OVULATION_TEST,
+                HealthDataType.CERVICAL_MUCUS,
+                HealthDataType.SEXUAL_ACTIVITY,
+                HealthDataType.BASAL_BODY_TEMPERATURE
             )
         )
 
@@ -379,7 +424,7 @@ private fun PrivacyPage() {
         )
 
         if (FlavorUtils.isPlayStore) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
             ) {
@@ -466,11 +511,19 @@ fun iconForDataType(type: HealthDataType): ImageVector = when (type) {
     HealthDataType.HEIGHT              -> Icons.Filled.Height
     HealthDataType.BODY_FAT            -> Icons.Filled.MonitorWeight
     HealthDataType.LEAN_BODY_MASS      -> Icons.Filled.FitnessCenter
+    HealthDataType.BODY_WATER_MASS     -> Icons.Filled.WaterDrop
     HealthDataType.BONE_MASS           -> Icons.Filled.Accessibility
     HealthDataType.BASAL_METABOLIC_RATE -> Icons.Filled.LocalFireDepartment
     HealthDataType.VO2_MAX             -> Icons.Filled.Speed
     HealthDataType.NUTRITION           -> Icons.Filled.Restaurant
     HealthDataType.HYDRATION           -> Icons.Filled.WaterDrop
+    HealthDataType.MENSTRUATION_FLOW,
+    HealthDataType.MENSTRUATION_PERIOD,
+    HealthDataType.INTERMENSTRUAL_BLEEDING,
+    HealthDataType.OVULATION_TEST,
+    HealthDataType.CERVICAL_MUCUS,
+    HealthDataType.SEXUAL_ACTIVITY     -> Icons.Filled.Favorite
+    HealthDataType.BASAL_BODY_TEMPERATURE -> Icons.Filled.DeviceThermostat
 }
 
 @Composable

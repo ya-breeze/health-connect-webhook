@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A short-lived foreground service that performs a single background sync.
@@ -26,7 +27,7 @@ import kotlinx.coroutines.launch
  *
  * The service:
  *  1. Promotes itself to foreground with a transient notification.
- *  2. Calls [SyncManager.performSync].
+ *  2. Calls [SyncManager.performSyncWithCatchUp].
  *  3. Reschedules the next alarm (for SCHEDULED mode).
  *  4. Calls stopSelf() — the notification disappears automatically.
  */
@@ -34,6 +35,7 @@ class SyncForegroundService : Service() {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    private val syncManager: SyncManager by lazy { SyncManager(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,30 +59,57 @@ class SyncForegroundService : Service() {
         val scheduleId = intent?.getStringExtra(EXTRA_SCHEDULE_ID)
         Log.d(TAG, "Starting foreground sync (scheduleId=$scheduleId)")
 
+        if (!isSyncRunning.compareAndSet(false, true)) {
+            Log.d(TAG, "Sync already in progress, skipping duplicate start (scheduleId=$scheduleId)")
+            // Still reschedule the incoming alarm so it is not lost while a sync runs
+            rescheduleAlarmIfNeeded(scheduleId)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
         scope.launch {
             try {
-                val syncManager = SyncManager(this@SyncForegroundService)
-                syncManager.performSync(syncType = "auto")
+                syncManager.performSyncWithCatchUp(syncType = "auto")
 
                 // Reschedule the daily alarm for the next occurrence
-                if (scheduleId != null) {
-                    val prefsManager = PreferencesManager(this@SyncForegroundService)
-                    val schedule = prefsManager.getScheduledSyncs().find { it.id == scheduleId }
-                    if (schedule != null && schedule.enabled) {
-                        ScheduledSyncManager(this@SyncForegroundService).scheduleAlarm(schedule)
-                        Log.d(TAG, "Rescheduled alarm for next day: $scheduleId")
-                    }
-                }
+                rescheduleAlarmIfNeeded(scheduleId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Sync failed in foreground service: ${e.message}", e)
+            } catch (e: OutOfMemoryError) {
+                // Error, not Exception — still must stop the FGS or Android 15 throws
+                // ForegroundServiceDidNotStopInTimeException after the dataSync quota.
+                Log.e(TAG, "Sync OOM in foreground service: ${e.message}", e)
             } finally {
+                isSyncRunning.set(false)
                 stopSelf(startId)
             }
         }
 
         return START_NOT_STICKY
+    }
+
+    /**
+     * Android 15+ dataSync FGS: total 6 hours per 24 hours. Stop within a few
+     * seconds when the system calls this, or the process crashes with
+     * ForegroundServiceDidNotStopInTimeException.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "dataSync FGS timeout (fgsType=$fgsType); cancelling sync")
+        job.cancel()
+        isSyncRunning.set(false)
+        stopSelf(startId)
+    }
+
+    private fun rescheduleAlarmIfNeeded(scheduleId: String?) {
+        if (scheduleId == null) return
+        val prefsManager = PreferencesManager(this)
+        val schedule = prefsManager.getScheduledSyncs().find { it.id == scheduleId }
+        if (schedule != null && schedule.enabled) {
+            ScheduledSyncManager(this).scheduleAlarm(schedule)
+            Log.d(TAG, "Rescheduled alarm for next day: $scheduleId")
+        }
     }
 
     override fun onDestroy() {
@@ -93,6 +122,7 @@ class SyncForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         const val CHANNEL_ID = "hc_sync_service"
         const val EXTRA_SCHEDULE_ID = "schedule_id"
+        private val isSyncRunning = AtomicBoolean(false)
 
         fun start(context: Context, scheduleId: String? = null) {
             val intent = Intent(context, SyncForegroundService::class.java).apply {
