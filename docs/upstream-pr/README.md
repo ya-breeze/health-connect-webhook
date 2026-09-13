@@ -1,56 +1,30 @@
 # Handoff: upstream-ready catch-up pull request
 
-Nothing has been written to `mcnaveen/health-connect-webhook`: no branch, pull request, issue, comment, review, or merge. The candidate exists only on the `ya-breeze/health-connect-webhook` fork. The owner may run the command below after reviewing this handoff.
+Nothing has been written to `mcnaveen/health-connect-webhook`: no branch, pull request, issue, comment, review, or merge. The candidate exists only locally in the `ya-breeze/health-connect-webhook` fork checkout. The owner may run the command below once a corrected candidate has passed final review — **not yet true of anything described in this file**, see the status below.
 
 ## Candidate
 
 - Branch: `feat/offline-catchup-sync-upstream`
 - Base: `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` (`upstream/main` when fetched)
-- Head: `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`
-- Commits, oldest first:
-  - `ed64b00f700277b2f5004a9ecae993ced06d6575 feat: replay missed automatic sync data`
-  - `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6 test: cover automatic catch-up progress`
+- Previous head: `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` — superseded. It left a crash-unsafe ordering between the automatic and general cursor writes, gave automatic reads no overlap against late or backdated records, and covered mixed webhook success/failure only through a detached boolean helper rather than the real delivery path.
+- A corrected candidate exists **only as a local, unpublished branch** (`feat/offline-catchup-sync-corrected`) built from the same base. It fixes the three defects above. It has not been reviewed and is not the final upstream candidate — see [Status](#status).
 - Pull request body: [`offline-catchup-sync.md`](./offline-catchup-sync.md)
 
-Diffstat against the base:
+## Status
 
-```text
- README.md                                          |   5 +
- .../java/com/hcwebhook/app/HealthConnectManager.kt |   2 +-
- .../com/hcwebhook/app/LocalTcpServerManager.kt     |   6 +-
- .../java/com/hcwebhook/app/PreferencesManager.kt   |  12 +-
- .../com/hcwebhook/app/SyncForegroundService.kt     |   6 +-
- app/src/main/java/com/hcwebhook/app/SyncManager.kt | 208 +++++++++-
- app/src/main/java/com/hcwebhook/app/SyncWorker.kt  |   2 +-
- .../com/hcwebhook/app/components/ManualSyncCard.kt |  15 +-
- app/src/main/res/values-de/strings.xml             |  16 +
- app/src/main/res/values-es/strings.xml             |  16 +
- app/src/main/res/values-fr/strings.xml             |  16 +
- app/src/main/res/values-it/strings.xml             |  16 +
- app/src/main/res/values-ja/strings.xml             |  16 +
- app/src/main/res/values-ko/strings.xml             |  16 +
- app/src/main/res/values-pt/strings.xml             |  16 +
- app/src/main/res/values-ta/strings.xml             |  16 +
- app/src/main/res/values-zh/strings.xml             |  16 +
- .../com/hcwebhook/app/SyncManagerCatchUpTest.kt    | 418 +++++++++++++++++++++
- docs/local-http.md                                 |   7 +-
- docs/webhook.md                                    |   5 +-
- 20 files changed, 808 insertions(+), 22 deletions(-)
-```
+- Lifecycle remediation (the `SyncForegroundService` duplicate-start coalescing groundwork this candidate was split from) is still pending.
+- Final review of the corrected candidate is still pending. Nothing in this repo has completed the Review Gate against `feat/offline-catchup-sync-corrected`, so no SHA in this handoff should be treated as final or reviewed.
+- Until both are done, do not run the pull request command below.
 
-## Validation and review
+## Validation
 
-- `./gradlew assembleDebug` — passed on the feature parent and candidate head.
-- `./gradlew test` — passed on the candidate head, including all four flavor/build-type unit-test variants.
-- `./gradlew lint` — passed on the candidate head. The fetched upstream base initially failed on 16 untranslated gRPC resource keys; the feature commit supplies those keys for all nine configured locales.
-- Codex Review Gate — passed on the pinned candidate for correctness, repository conventions, and spec/test fidelity after fixing missing/future automatic-cursor fallback, read-boundary handling, manual/API per-type cursor suppression, partial multi-webhook checkpointing, detached-helper test coverage, and the final automatic-cursor documentation mismatch found by native passes.
-- Independent Claude peer — peer unavailable. The one clean-gate attempt initialized successfully but was rejected before review by the account's weekly rate limit; the candidate and handoff worktrees were unchanged before and after it.
+`./gradlew assembleDebug`, `./gradlew test` (all flavor/build-type variants), and `./gradlew lint` (all flavors) pass locally on the corrected candidate's tree. This is local build/test evidence only — it is not a substitute for the Review Gate pass recorded in [Status](#status).
 
 The upstream-ready diff excludes `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, `docs/specs/`, and `docs/upstream-pr/`.
 
 ## Owner-only pull request command
 
-Run only after this idea branch has been merged to the fork's `main`, so the pull request body's prior-art link resolves:
+Do not run this until [Status](#status) is clear. Once it is, publish the reviewed candidate to `feat/offline-catchup-sync-upstream` on the fork and merge this idea branch to the fork's `main` first, so the pull request body's prior-art link resolves:
 
 ```bash
 gh pr create --repo mcnaveen/health-connect-webhook \

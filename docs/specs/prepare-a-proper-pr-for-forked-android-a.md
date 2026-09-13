@@ -56,8 +56,8 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 4: Leave an honest, buildable intermediate candidate
 
-- [ ] Keep the upstream-ready diff limited to the catch-up implementation, its tests and user-facing documentation, the existing localization lint repair, and the JSON metadata parity required by overlap deduplication; do not include `docs/specs/`, `docs/upstream-pr/`, dependency upgrades, cleartext policy, or the deferred service lifecycle change.
-- [ ] Run the project’s existing assemble, unit-test, and lint checks against the corrected data-path candidate and fix regressions, retaining only buildable commits.
-- [ ] Commit the corrected data-path candidate locally for the deferred lifecycle work, but do not publish the intermediate ref or describe it as the final reviewed upstream candidate.
-- [ ] In `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md`, remove the stale passed-gate assertion and final-candidate status, reset review-dependent checklist claims, remove the empty `Closes #` placeholder, and state that lifecycle remediation and final review remain pending without inventing a replacement final SHA.
-- [ ] Mark completed
+- [x] Keep the upstream-ready diff limited to the catch-up implementation, its tests and user-facing documentation, the existing localization lint repair, and the JSON metadata parity required by overlap deduplication; do not include `docs/specs/`, `docs/upstream-pr/`, dependency upgrades, cleartext policy, or the deferred service lifecycle change.
+- [x] Run the project’s existing assemble, unit-test, and lint checks against the corrected data-path candidate and fix regressions, retaining only buildable commits.
+- [x] Commit the corrected data-path candidate locally for the deferred lifecycle work, but do not publish the intermediate ref or describe it as the final reviewed upstream candidate.
+- [x] In `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md`, remove the stale passed-gate assertion and final-candidate status, reset review-dependent checklist claims, remove the empty `Closes #` placeholder, and state that lifecycle remediation and final review remain pending without inventing a replacement final SHA.
+- [x] Mark completed

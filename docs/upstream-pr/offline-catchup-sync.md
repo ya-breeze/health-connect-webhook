@@ -6,7 +6,6 @@
 - Add the nine missing locale sets for upstream's existing gRPC delivery strings so the required project lint gate remains green on the current base.
 
 ## Related
-- Closes #
 - Related to #45, #52
 
 ## Type of change
@@ -20,7 +19,7 @@
 - [x] I tested this change locally
 - [x] I updated documentation (if needed)
 - [x] I added/updated tests (if needed)
-- [x] I verified there are no breaking changes
+- [ ] I verified there are no breaking changes — pending final review, see [Status](./README.md#status)
 - [x] I checked for sensitive data/secrets
 
 ## Screenshots / Recordings (if UI changes)
@@ -30,7 +29,7 @@
 
 ### Progress and migration trade-off
 
-`last_sync_time` remains the general status shown in the app and returned by local `/stats` and `/health`. The new `last_automatic_sync_time` preference is the source used to plan every automatic read once it exists, so manual/API per-type cursors cannot suppress records from a normal sub-48-hour automatic run. A normal automatic run advances it to the boundary captured before its read, and only after `performSync` succeeds; this leaves records created while that sync is finishing on the replayable side of the cursor. Catch-up advances it after each successful slice and never for a failed slice. Automatic calls require every attempted webhook delivery to succeed before shared progress advances, while manual/API calls retain the existing any-success behavior. The general display timestamp moves once after a complete replay.
+`last_sync_time` remains the general status shown in the app and returned by local `/stats` and `/health`. The new `last_automatic_sync_time` preference is the source used to plan every automatic read once it exists, so manual/API per-type cursors cannot suppress records from a normal sub-48-hour automatic run. Automatic orchestration, not `performSync`, owns both writes: a normal run persists the captured automatic boundary first and the general timestamp second, only after `performSync` succeeds, so a crash between the two can never leave the general timestamp ahead of the automatic cursor. Catch-up advances the automatic boundary after each successful slice and never for a failed slice, moving the general timestamp once after a complete replay. Automatic calls require every attempted webhook delivery to succeed before shared progress advances, while manual/API calls retain the existing any-success behavior. Every automatic read also starts 24 hours before its cursor (clamped to the 30-day catch-up horizon) to recover records ingested or modified shortly after the cursor passed them; receivers dedupe the resulting at-least-once redelivery using the record identity fields documented in `docs/webhook.md`.
 
 For compatibility, the first automatic run after upgrade seeds the new preference from `last_sync_time` before doing more work. That avoids treating every existing install as having no history. The one-time trade-off is that if the legacy timestamp most recently came from a manual/API sync, the first post-upgrade seed cannot reconstruct an older automatic watermark; all later manual/API activity is isolated correctly.
 
@@ -44,12 +43,6 @@ The fork handoff searched upstream issues and pull requests for `catch-up`, `cat
 
 ### Validation
 
-Passed on `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`:
-
-- `./gradlew assembleDebug`
-- `./gradlew test`
-- `./gradlew lint`
-- `./gradlew assembleDebug` also passed independently on the retained feature parent `ed64b00f700277b2f5004a9ecae993ced06d6575`.
-- The native Codex Review Gate passed for correctness, conventions, and spec/test fidelity after correcting the missing/future automatic-cursor fallback and the normal automatic-cursor documentation. The independent Claude peer was unavailable because its weekly quota rejected the attempt before review.
+`./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` pass locally on the current corrected candidate. That candidate has not been through the Review Gate or an independent peer review yet, and lifecycle remediation described in [README.md's Status](./README.md#status) is still pending — this PR body is not ready to open until both are done. Do not treat this as a final-candidate or passed-gate record; it will be replaced once review actually completes.
 
 Created by Codex
