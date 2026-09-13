@@ -47,12 +47,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 3: Test partial delivery through the production aggregation path
 
-- [ ] Extract the per-webhook delivery aggregation currently embedded in `SyncManager.performSync` into an internal production coordinator with injectable delivery calls, and have `performSync` use that coordinator rather than duplicating its decision logic.
-- [ ] Preserve enabled-webhook selection, data-type filtering, JSON and gRPC branches, payload-size handling, failure selection, webhook logging, and notification aggregation while representing attempted successes and failures in one production result.
-- [ ] Make `requireAllWebhookDeliveries = true` return failure when any attempted destination fails even if another succeeds; retain the existing any-success behavior for manual/API calls that pass `false`.
-- [ ] Replace reliance on the detached `webhookBatchSucceeded` test with coverage that sends one success and one failure through the coordinator used by `performSync`, feeds that result through `runAutomaticSync`, and proves neither automatic nor general progress advances.
-- [ ] Cover all-success, all-failure, no-matching-data, JSON/gRPC, and filtered-webhook cases sufficiently to show the refactor preserved existing delivery behavior.
-- [ ] Mark completed
+- [x] Extract the per-webhook delivery aggregation currently embedded in `SyncManager.performSync` into an internal production coordinator with injectable delivery calls, and have `performSync` use that coordinator rather than duplicating its decision logic.
+- [x] Preserve enabled-webhook selection, data-type filtering, JSON and gRPC branches, payload-size handling, failure selection, webhook logging, and notification aggregation while representing attempted successes and failures in one production result.
+- [x] Make `requireAllWebhookDeliveries = true` return failure when any attempted destination fails even if another succeeds; retain the existing any-success behavior for manual/API calls that pass `false`.
+- [x] Replace reliance on the detached `webhookBatchSucceeded` test with coverage that sends one success and one failure through the coordinator used by `performSync`, feeds that result through `runAutomaticSync`, and proves neither automatic nor general progress advances.
+- [x] Cover all-success, all-failure, no-matching-data, JSON/gRPC, and filtered-webhook cases sufficiently to show the refactor preserved existing delivery behavior.
+- [x] Mark completed
 
 ### Task 4: Leave an honest, buildable intermediate candidate
 

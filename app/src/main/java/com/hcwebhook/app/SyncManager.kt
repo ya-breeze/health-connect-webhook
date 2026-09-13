@@ -189,96 +189,72 @@ class SyncManager(private val context: Context) {
 
             // Post to each enabled webhook with optional per-webhook data type filtering
             if (enabledWebhookConfigs.isNotEmpty()) {
-                var atLeastOneSuccess = false
-                var atLeastOneAttempted = false
-                var atLeastOneFailure = false
-                var lastFailure: Throwable? = null
+                val globalNotifs = preferencesManager.getNotificationConfigs()
+
+                val outcome = deliverToWebhooks(
+                    healthData = healthData,
+                    enabledWebhookConfigs = enabledWebhookConfigs,
+                    requireAllWebhookDeliveries = requireAllWebhookDeliveries,
+                    notificationConfigsFor = { config ->
+                        config.notificationConfigIds.mapNotNull { id -> globalNotifs.find { it.id == id } }
+                    },
+                    deliver = deliver@{ config, filteredData, totalRecords ->
+                        when (config.deliveryFormat) {
+                            WebhookDeliveryFormat.JSON -> {
+                                val payload = try {
+                                    if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
+                                } catch (oom: OutOfMemoryError) {
+                                    return@deliver WebhookDeliveryAttempt.PayloadBuildFailed(
+                                        Exception(
+                                            "Out of memory while building JSON for ${config.url}. Raise sample resolution.",
+                                            oom
+                                        )
+                                    )
+                                }
+                                val manager = WebhookManager(
+                                    webhookConfigs = listOf(config),
+                                    context = context,
+                                    dataType = "all",
+                                    recordCount = totalRecords,
+                                    syncType = syncType,
+                                    payload = payload
+                                )
+                                WebhookDeliveryAttempt.Delivered(manager.postData(payload))
+                            }
+                            WebhookDeliveryFormat.GRPC -> {
+                                val grpcPayload = try {
+                                    ProtobufPayloadBuilder.build(filteredData, appVersionName)
+                                } catch (oom: OutOfMemoryError) {
+                                    return@deliver WebhookDeliveryAttempt.PayloadBuildFailed(
+                                        Exception(
+                                            "Out of memory while building protobuf for ${config.url}. Raise sample resolution.",
+                                            oom
+                                        )
+                                    )
+                                }
+                                val logJson = try {
+                                    if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
+                                } catch (_: OutOfMemoryError) {
+                                    null
+                                }
+                                WebhookDeliveryAttempt.Delivered(
+                                    GrpcWebhookClient.deliver(
+                                        config = config,
+                                        payload = grpcPayload,
+                                        context = context,
+                                        dataType = "all",
+                                        recordCount = totalRecords,
+                                        syncType = syncType,
+                                        logPayload = logJson
+                                    )
+                                )
+                            }
+                        }
+                    },
+                )
 
                 val dispatcher = NotificationDispatcher()
-                val globalNotifs = preferencesManager.getNotificationConfigs()
-                val aggregatedNotifs = mutableMapOf<NotificationConfig, MutableList<String>>()
-
-                for (config in enabledWebhookConfigs) {
-                    val filteredData = if (config.dataTypeFilter != null) {
-                        filterHealthData(healthData, config.dataTypeFilter)
-                    } else {
-                        healthData
-                    }
-                    if (isHealthDataEmpty(filteredData)) continue
-                    atLeastOneAttempted = true
-                    val totalRecords = countHealthData(filteredData)
-
-                    val result = when (config.deliveryFormat) {
-                        WebhookDeliveryFormat.JSON -> {
-                            val payload = try {
-                                if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
-                            } catch (oom: OutOfMemoryError) {
-                                atLeastOneFailure = true
-                                lastFailure = Exception(
-                                    "Out of memory while building JSON for ${config.url}. Raise sample resolution.",
-                                    oom
-                                )
-                                continue
-                            }
-                            val manager = WebhookManager(
-                                webhookConfigs = listOf(config),
-                                context = context,
-                                dataType = "all",
-                                recordCount = totalRecords,
-                                syncType = syncType,
-                                payload = payload
-                            )
-                            manager.postData(payload)
-                        }
-                        WebhookDeliveryFormat.GRPC -> {
-                            val grpcPayload = try {
-                                ProtobufPayloadBuilder.build(filteredData, appVersionName)
-                            } catch (oom: OutOfMemoryError) {
-                                atLeastOneFailure = true
-                                lastFailure = Exception(
-                                    "Out of memory while building protobuf for ${config.url}. Raise sample resolution.",
-                                    oom
-                                )
-                                continue
-                            }
-                            val logJson = try {
-                                if (config.dataTypeFilter != null) buildJsonPayload(filteredData) else fullPayload
-                            } catch (_: OutOfMemoryError) {
-                                null
-                            }
-                            GrpcWebhookClient.deliver(
-                                config = config,
-                                payload = grpcPayload,
-                                context = context,
-                                dataType = "all",
-                                recordCount = totalRecords,
-                                syncType = syncType,
-                                logPayload = logJson
-                            )
-                        }
-                    }
-                    
-                    val notifConfigs = config.notificationConfigIds.mapNotNull { id -> 
-                        globalNotifs.find { it.id == id } 
-                    }
-
-                    if (result.isSuccess) {
-                        atLeastOneSuccess = true
-                        val msg = "✅ ${config.url}: $totalRecords records"
-                        notifConfigs.forEach { nc ->
-                            aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg)
-                        }
-                    } else {
-                        atLeastOneFailure = true
-                        lastFailure = result.exceptionOrNull()
-                        val msg = "❌ ${config.url}: ${lastFailure?.message ?: "Error"}"
-                        notifConfigs.forEach { nc ->
-                            aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg)
-                        }
-                    }
-                }
-
-                aggregatedNotifs.forEach { (nc, messages) ->
+                outcome.notifications.forEach { (nc, messages) ->
                     val title = if (messages.any { it.startsWith("❌") }) "Sync Completed with Errors" else "Sync Succeeded"
                     dispatcher.dispatch(
                         context = context,
@@ -288,13 +264,13 @@ class SyncManager(private val context: Context) {
                     )
                 }
 
-                if (!atLeastOneAttempted) {
+                if (!outcome.attempted) {
                     if (updateLastSyncTime) preferencesManager.setLastSyncTime(Instant.now().toEpochMilli())
                     preferencesManager.setLastSyncSummary("No matching data")
                     return@withContext Result.success(SyncResult.NoMatchingData)
                 }
-                if (!webhookBatchSucceeded(atLeastOneSuccess, atLeastOneFailure, requireAllWebhookDeliveries)) {
-                    return@withContext Result.failure(lastFailure ?: Exception("Failed to post to webhooks"))
+                if (!outcome.succeeded) {
+                    return@withContext Result.failure(outcome.failure ?: Exception("Failed to post to webhooks"))
                 }
             }
 
@@ -356,75 +332,6 @@ class SyncManager(private val context: Context) {
             },
             pauseBetweenSlices = { kotlinx.coroutines.delay(INTER_SLICE_DELAY_MS) },
         )
-    }
-
-    private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
-        val allowed = allowedTypes.map { it.uppercase() }.toSet()
-        return data.copy(
-            steps = if ("STEPS" in allowed) data.steps else emptyList(),
-            sleep = if ("SLEEP" in allowed) data.sleep else emptyList(),
-            heartRate = if ("HEART_RATE" in allowed) data.heartRate else emptyList(),
-            heartRateVariability = if ("HEART_RATE_VARIABILITY" in allowed) data.heartRateVariability else emptyList(),
-            distance = if ("DISTANCE" in allowed) data.distance else emptyList(),
-            activeCalories = if ("ACTIVE_CALORIES" in allowed) data.activeCalories else emptyList(),
-            totalCalories = if ("TOTAL_CALORIES" in allowed) data.totalCalories else emptyList(),
-            weight = if ("WEIGHT" in allowed) data.weight else emptyList(),
-            height = if ("HEIGHT" in allowed) data.height else emptyList(),
-            bloodPressure = if ("BLOOD_PRESSURE" in allowed) data.bloodPressure else emptyList(),
-            bloodGlucose = if ("BLOOD_GLUCOSE" in allowed) data.bloodGlucose else emptyList(),
-            oxygenSaturation = if ("OXYGEN_SATURATION" in allowed) data.oxygenSaturation else emptyList(),
-            bodyTemperature = if ("BODY_TEMPERATURE" in allowed) data.bodyTemperature else emptyList(),
-            skinTemperature = if ("SKIN_TEMPERATURE" in allowed) data.skinTemperature else emptyList(),
-            respiratoryRate = if ("RESPIRATORY_RATE" in allowed) data.respiratoryRate else emptyList(),
-            restingHeartRate = if ("RESTING_HEART_RATE" in allowed) data.restingHeartRate else emptyList(),
-            exercise = if ("EXERCISE" in allowed) data.exercise else emptyList(),
-            hydration = if ("HYDRATION" in allowed) data.hydration else emptyList(),
-            nutrition = if ("NUTRITION" in allowed) data.nutrition else emptyList(),
-            basalMetabolicRate = if ("BASAL_METABOLIC_RATE" in allowed) data.basalMetabolicRate else emptyList(),
-            bodyFat = if ("BODY_FAT" in allowed) data.bodyFat else emptyList(),
-            leanBodyMass = if ("LEAN_BODY_MASS" in allowed) data.leanBodyMass else emptyList(),
-            bodyWaterMass = if ("BODY_WATER_MASS" in allowed) data.bodyWaterMass else emptyList(),
-            vo2Max = if ("VO2_MAX" in allowed) data.vo2Max else emptyList(),
-            boneMass = if ("BONE_MASS" in allowed) data.boneMass else emptyList(),
-            menstruationFlow = if ("MENSTRUATION_FLOW" in allowed) data.menstruationFlow else emptyList(),
-            menstruationPeriod = if ("MENSTRUATION_PERIOD" in allowed) data.menstruationPeriod else emptyList(),
-            intermenstrualBleeding = if ("INTERMENSTRUAL_BLEEDING" in allowed) data.intermenstrualBleeding else emptyList(),
-            ovulationTest = if ("OVULATION_TEST" in allowed) data.ovulationTest else emptyList(),
-            cervicalMucus = if ("CERVICAL_MUCUS" in allowed) data.cervicalMucus else emptyList(),
-            sexualActivity = if ("SEXUAL_ACTIVITY" in allowed) data.sexualActivity else emptyList(),
-            basalBodyTemperature = if ("BASAL_BODY_TEMPERATURE" in allowed) data.basalBodyTemperature else emptyList()
-        )
-    }
-
-    private fun countHealthData(data: HealthData): Int {
-        return data.steps.size + data.sleep.size + data.heartRate.size +
-                data.heartRateVariability.size + data.distance.size + data.activeCalories.size +
-                data.totalCalories.size + data.weight.size + data.height.size +
-                data.bloodPressure.size + data.bloodGlucose.size + data.oxygenSaturation.size +
-                data.bodyTemperature.size + data.skinTemperature.size + data.respiratoryRate.size +
-                data.restingHeartRate.size + data.exercise.size + data.hydration.size +
-                data.nutrition.size + data.basalMetabolicRate.size + data.bodyFat.size +
-                data.leanBodyMass.size + data.bodyWaterMass.size + data.vo2Max.size + data.boneMass.size +
-                data.menstruationFlow.size + data.menstruationPeriod.size +
-                data.intermenstrualBleeding.size + data.ovulationTest.size +
-                data.cervicalMucus.size + data.sexualActivity.size + data.basalBodyTemperature.size
-    }
-
-    private fun isHealthDataEmpty(data: HealthData): Boolean {
-        return data.steps.isEmpty() && data.sleep.isEmpty() && data.heartRate.isEmpty() &&
-                data.heartRateVariability.isEmpty() &&
-                data.distance.isEmpty() && data.activeCalories.isEmpty() && data.totalCalories.isEmpty() &&
-                data.weight.isEmpty() && data.height.isEmpty() && data.bloodPressure.isEmpty() &&
-                data.bloodGlucose.isEmpty() && data.oxygenSaturation.isEmpty() && data.bodyTemperature.isEmpty() &&
-                data.skinTemperature.isEmpty() &&
-                data.respiratoryRate.isEmpty() && data.restingHeartRate.isEmpty() && data.exercise.isEmpty() &&
-                data.hydration.isEmpty() && data.nutrition.isEmpty() &&
-                data.basalMetabolicRate.isEmpty() && data.bodyFat.isEmpty() && data.leanBodyMass.isEmpty() &&
-                data.bodyWaterMass.isEmpty() &&
-                data.vo2Max.isEmpty() && data.boneMass.isEmpty() &&
-                data.menstruationFlow.isEmpty() && data.menstruationPeriod.isEmpty() &&
-                data.intermenstrualBleeding.isEmpty() && data.ovulationTest.isEmpty() &&
-                data.cervicalMucus.isEmpty() && data.sexualActivity.isEmpty() && data.basalBodyTemperature.isEmpty()
     }
 
     /**
@@ -1112,6 +1019,144 @@ class SyncManager(private val context: Context) {
             requireAllWebhookDeliveries: Boolean,
         ): Boolean = atLeastOneSuccess && (!requireAllWebhookDeliveries || !atLeastOneFailure)
 
+        private fun filterHealthData(data: HealthData, allowedTypes: Set<String>): HealthData {
+            val allowed = allowedTypes.map { it.uppercase() }.toSet()
+            return data.copy(
+                steps = if ("STEPS" in allowed) data.steps else emptyList(),
+                sleep = if ("SLEEP" in allowed) data.sleep else emptyList(),
+                heartRate = if ("HEART_RATE" in allowed) data.heartRate else emptyList(),
+                heartRateVariability = if ("HEART_RATE_VARIABILITY" in allowed) data.heartRateVariability else emptyList(),
+                distance = if ("DISTANCE" in allowed) data.distance else emptyList(),
+                activeCalories = if ("ACTIVE_CALORIES" in allowed) data.activeCalories else emptyList(),
+                totalCalories = if ("TOTAL_CALORIES" in allowed) data.totalCalories else emptyList(),
+                weight = if ("WEIGHT" in allowed) data.weight else emptyList(),
+                height = if ("HEIGHT" in allowed) data.height else emptyList(),
+                bloodPressure = if ("BLOOD_PRESSURE" in allowed) data.bloodPressure else emptyList(),
+                bloodGlucose = if ("BLOOD_GLUCOSE" in allowed) data.bloodGlucose else emptyList(),
+                oxygenSaturation = if ("OXYGEN_SATURATION" in allowed) data.oxygenSaturation else emptyList(),
+                bodyTemperature = if ("BODY_TEMPERATURE" in allowed) data.bodyTemperature else emptyList(),
+                skinTemperature = if ("SKIN_TEMPERATURE" in allowed) data.skinTemperature else emptyList(),
+                respiratoryRate = if ("RESPIRATORY_RATE" in allowed) data.respiratoryRate else emptyList(),
+                restingHeartRate = if ("RESTING_HEART_RATE" in allowed) data.restingHeartRate else emptyList(),
+                exercise = if ("EXERCISE" in allowed) data.exercise else emptyList(),
+                hydration = if ("HYDRATION" in allowed) data.hydration else emptyList(),
+                nutrition = if ("NUTRITION" in allowed) data.nutrition else emptyList(),
+                basalMetabolicRate = if ("BASAL_METABOLIC_RATE" in allowed) data.basalMetabolicRate else emptyList(),
+                bodyFat = if ("BODY_FAT" in allowed) data.bodyFat else emptyList(),
+                leanBodyMass = if ("LEAN_BODY_MASS" in allowed) data.leanBodyMass else emptyList(),
+                bodyWaterMass = if ("BODY_WATER_MASS" in allowed) data.bodyWaterMass else emptyList(),
+                vo2Max = if ("VO2_MAX" in allowed) data.vo2Max else emptyList(),
+                boneMass = if ("BONE_MASS" in allowed) data.boneMass else emptyList(),
+                menstruationFlow = if ("MENSTRUATION_FLOW" in allowed) data.menstruationFlow else emptyList(),
+                menstruationPeriod = if ("MENSTRUATION_PERIOD" in allowed) data.menstruationPeriod else emptyList(),
+                intermenstrualBleeding = if ("INTERMENSTRUAL_BLEEDING" in allowed) data.intermenstrualBleeding else emptyList(),
+                ovulationTest = if ("OVULATION_TEST" in allowed) data.ovulationTest else emptyList(),
+                cervicalMucus = if ("CERVICAL_MUCUS" in allowed) data.cervicalMucus else emptyList(),
+                sexualActivity = if ("SEXUAL_ACTIVITY" in allowed) data.sexualActivity else emptyList(),
+                basalBodyTemperature = if ("BASAL_BODY_TEMPERATURE" in allowed) data.basalBodyTemperature else emptyList()
+            )
+        }
+
+        private fun countHealthData(data: HealthData): Int {
+            return data.steps.size + data.sleep.size + data.heartRate.size +
+                    data.heartRateVariability.size + data.distance.size + data.activeCalories.size +
+                    data.totalCalories.size + data.weight.size + data.height.size +
+                    data.bloodPressure.size + data.bloodGlucose.size + data.oxygenSaturation.size +
+                    data.bodyTemperature.size + data.skinTemperature.size + data.respiratoryRate.size +
+                    data.restingHeartRate.size + data.exercise.size + data.hydration.size +
+                    data.nutrition.size + data.basalMetabolicRate.size + data.bodyFat.size +
+                    data.leanBodyMass.size + data.bodyWaterMass.size + data.vo2Max.size + data.boneMass.size +
+                    data.menstruationFlow.size + data.menstruationPeriod.size +
+                    data.intermenstrualBleeding.size + data.ovulationTest.size +
+                    data.cervicalMucus.size + data.sexualActivity.size + data.basalBodyTemperature.size
+        }
+
+        private fun isHealthDataEmpty(data: HealthData): Boolean {
+            return data.steps.isEmpty() && data.sleep.isEmpty() && data.heartRate.isEmpty() &&
+                    data.heartRateVariability.isEmpty() &&
+                    data.distance.isEmpty() && data.activeCalories.isEmpty() && data.totalCalories.isEmpty() &&
+                    data.weight.isEmpty() && data.height.isEmpty() && data.bloodPressure.isEmpty() &&
+                    data.bloodGlucose.isEmpty() && data.oxygenSaturation.isEmpty() && data.bodyTemperature.isEmpty() &&
+                    data.skinTemperature.isEmpty() &&
+                    data.respiratoryRate.isEmpty() && data.restingHeartRate.isEmpty() && data.exercise.isEmpty() &&
+                    data.hydration.isEmpty() && data.nutrition.isEmpty() &&
+                    data.basalMetabolicRate.isEmpty() && data.bodyFat.isEmpty() && data.leanBodyMass.isEmpty() &&
+                    data.bodyWaterMass.isEmpty() &&
+                    data.vo2Max.isEmpty() && data.boneMass.isEmpty() &&
+                    data.menstruationFlow.isEmpty() && data.menstruationPeriod.isEmpty() &&
+                    data.intermenstrualBleeding.isEmpty() && data.ovulationTest.isEmpty() &&
+                    data.cervicalMucus.isEmpty() && data.sexualActivity.isEmpty() && data.basalBodyTemperature.isEmpty()
+        }
+
+        /**
+         * Production coordinator for per-webhook delivery, shared by every
+         * [SyncManager.performSync] call. Preserves per-webhook data-type
+         * filtering, skips webhooks with no matching data, and aggregates
+         * notification messages exactly as the delivery loop used to inline.
+         * [deliver] performs the actual JSON or gRPC network call (or reports
+         * that the payload itself couldn't be built) for one webhook config;
+         * injecting it lets JVM tests exercise this aggregation — including
+         * the `requireAllWebhookDeliveries` semantics from
+         * [webhookBatchSucceeded] — without touching Android APIs.
+         *
+         * A [WebhookDeliveryAttempt.PayloadBuildFailed] result (e.g. an
+         * out-of-memory building the payload for one oversized webhook)
+         * counts toward failure the same as a delivered-but-rejected result,
+         * but is not surfaced as a notification: there is no meaningful
+         * per-webhook message to show before a payload even exists.
+         */
+        internal suspend fun deliverToWebhooks(
+            healthData: HealthData,
+            enabledWebhookConfigs: List<WebhookConfig>,
+            requireAllWebhookDeliveries: Boolean,
+            notificationConfigsFor: (WebhookConfig) -> List<NotificationConfig>,
+            deliver: suspend (config: WebhookConfig, filteredData: HealthData, totalRecords: Int) -> WebhookDeliveryAttempt,
+        ): WebhookDeliveryOutcome {
+            var atLeastOneSuccess = false
+            var atLeastOneAttempted = false
+            var atLeastOneFailure = false
+            var lastFailure: Throwable? = null
+            val aggregatedNotifs = mutableMapOf<NotificationConfig, MutableList<String>>()
+
+            for (config in enabledWebhookConfigs) {
+                val filteredData = if (config.dataTypeFilter != null) {
+                    filterHealthData(healthData, config.dataTypeFilter)
+                } else {
+                    healthData
+                }
+                if (isHealthDataEmpty(filteredData)) continue
+                atLeastOneAttempted = true
+                val totalRecords = countHealthData(filteredData)
+
+                when (val attempt = deliver(config, filteredData, totalRecords)) {
+                    is WebhookDeliveryAttempt.PayloadBuildFailed -> {
+                        atLeastOneFailure = true
+                        lastFailure = attempt.failure
+                    }
+                    is WebhookDeliveryAttempt.Delivered -> {
+                        val notifConfigs = notificationConfigsFor(config)
+                        if (attempt.result.isSuccess) {
+                            atLeastOneSuccess = true
+                            val msg = "✅ ${config.url}: $totalRecords records"
+                            notifConfigs.forEach { nc -> aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg) }
+                        } else {
+                            atLeastOneFailure = true
+                            lastFailure = attempt.result.exceptionOrNull()
+                            val msg = "❌ ${config.url}: ${lastFailure?.message ?: "Error"}"
+                            notifConfigs.forEach { nc -> aggregatedNotifs.getOrPut(nc) { mutableListOf() }.add(msg) }
+                        }
+                    }
+                }
+            }
+
+            return WebhookDeliveryOutcome(
+                attempted = atLeastOneAttempted,
+                succeeded = webhookBatchSucceeded(atLeastOneSuccess, atLeastOneFailure, requireAllWebhookDeliveries),
+                failure = lastFailure,
+                notifications = aggregatedNotifs,
+            )
+        }
+
         internal data class AutomaticSyncRequest(
             val start: Instant?,
             val end: Instant?,
@@ -1270,3 +1315,23 @@ sealed class SyncResult {
     object NoMatchingData : SyncResult()
     data class Success(val syncCounts: Map<HealthDataType, Int>) : SyncResult()
 }
+
+/** One webhook's delivery attempt: a real send, or a failure to even build its payload. */
+internal sealed class WebhookDeliveryAttempt {
+    data class Delivered(val result: Result<Unit>) : WebhookDeliveryAttempt()
+    data class PayloadBuildFailed(val failure: Throwable) : WebhookDeliveryAttempt()
+}
+
+/**
+ * Aggregated result of [SyncManager.deliverToWebhooks]: whether any webhook
+ * had matching data to send, whether the batch counts as succeeded under the
+ * caller's [SyncManager.performSync] `requireAllWebhookDeliveries` policy,
+ * the last failure (if any), and per-[NotificationConfig] messages ready to
+ * dispatch.
+ */
+internal data class WebhookDeliveryOutcome(
+    val attempted: Boolean,
+    val succeeded: Boolean,
+    val failure: Throwable?,
+    val notifications: Map<NotificationConfig, List<String>>,
+)
