@@ -28,12 +28,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Make automatic cursor persistence crash-safe
 
-- [ ] Start from the local `feat/offline-catchup-sync-upstream` candidate at `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`, preserving its upstream base, valid feature behavior, compact history, and exclusion of idea-forge handoff artifacts from the upstream-ready diff.
-- [ ] Change `SyncManager.automaticSyncRequest` and `performSyncWithCatchUp` so normal and replay automatic calls invoke `performSync` with general timestamp updates disabled; manual and local API callers must retain their existing `performSync` behavior.
-- [ ] Update `SyncManager.runAutomaticSync` so successful normal work persists the captured automatic boundary before obtaining and persisting the general completion timestamp, while failures persist neither value and the legacy seed remains the first write when migration is required.
-- [ ] Preserve replay semantics: checkpoint every successful slice, stop without advancing the failed slice, and write the general timestamp only after all slices succeed.
-- [ ] Extend `SyncManagerCatchUpTest.kt` with ordered event assertions covering a fresh install, a legacy-seeded install, successful normal delivery, normal failure, completed replay, and replay failure; explicitly prove that no execution writes the general timestamp before its automatic boundary.
-- [ ] Mark completed
+- [x] Start from the local `feat/offline-catchup-sync-upstream` candidate at `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6`, preserving its upstream base, valid feature behavior, compact history, and exclusion of idea-forge handoff artifacts from the upstream-ready diff.
+- [x] Change `SyncManager.automaticSyncRequest` and `performSyncWithCatchUp` so normal and replay automatic calls invoke `performSync` with general timestamp updates disabled; manual and local API callers must retain their existing `performSync` behavior.
+- [x] Update `SyncManager.runAutomaticSync` so successful normal work persists the captured automatic boundary before obtaining and persisting the general completion timestamp, while failures persist neither value and the legacy seed remains the first write when migration is required.
+- [x] Preserve replay semantics: checkpoint every successful slice, stop without advancing the failed slice, and write the general timestamp only after all slices succeed.
+- [x] Extend `SyncManagerCatchUpTest.kt` with ordered event assertions covering a fresh install, a legacy-seeded install, successful normal delivery, normal failure, completed replay, and replay failure; explicitly prove that no execution writes the general timestamp before its automatic boundary.
+- [x] Mark completed
 
 ### Task 2: Recover bounded late ingestion without moving progress backward
 

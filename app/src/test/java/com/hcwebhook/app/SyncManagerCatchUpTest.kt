@@ -25,12 +25,18 @@ class SyncManagerCatchUpTest {
     }
 
     @Test
-    fun automaticRequestsUseCapturedBoundaryAndRequireAllWebhooks() {
+    fun automaticRequestsNeverUpdateGeneralTimestampThemselves() {
+        // Automatic orchestration (runAutomaticSync) owns both cursor writes;
+        // performSync must never persist the general timestamp on its own for
+        // either a normal or a replay automatic call, or a crash between
+        // performSync's internal write and the orchestrator's automatic-cursor
+        // write could seed a later run from a timestamp the automatic cursor
+        // never actually reached.
         val normal = SyncManager.automaticSyncRequest(null, now, "auto", isReplaySlice = false)
         assertNull(normal.start)
         assertNull(normal.end)
         assertEquals(now, normal.defaultReadEnd)
-        assertTrue(normal.updateLastSyncTime)
+        assertFalse(normal.updateLastSyncTime)
         assertTrue(normal.requireAllWebhookDeliveries)
         assertFalse(
             SyncManager.shouldUsePerTypeCursors(
@@ -51,7 +57,7 @@ class SyncManagerCatchUpTest {
         assertEquals(replayStart, normalFromCursor.start)
         assertNull(normalFromCursor.end)
         assertEquals(now, normalFromCursor.defaultReadEnd)
-        assertTrue(normalFromCursor.updateLastSyncTime)
+        assertFalse(normalFromCursor.updateLastSyncTime)
 
         val replay = SyncManager.automaticSyncRequest(replayStart, now, "catchup", isReplaySlice = true)
         assertEquals(replayStart, replay.start)
@@ -82,51 +88,63 @@ class SyncManagerCatchUpTest {
     }
 
     @Test
-    fun successfulNormalRunPersistsEntryBoundaryAfterSyncCompletes() = runBlocking {
-        val persistedAutomatic = mutableListOf<Long>()
+    fun freshInstallPersistsAutomaticBoundaryBeforeGeneralStatus() = runBlocking {
         val completion = now.plusSeconds(30).toEpochMilli()
+        val events = mutableListOf<String>()
 
         val result = SyncManager.runAutomaticSync(
             automaticSyncMs = null,
             generalSyncMs = null,
             now = now,
             syncType = "auto",
-            persistAutomaticSyncMs = persistedAutomatic::add,
-            persistGeneralSyncMs = { error("normal sync owns the general timestamp") },
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
             completionTimeMs = { completion },
             sync = { start, end, type, isReplaySlice ->
                 assertNull(start)
                 assertEquals(now, end)
                 assertEquals("auto", type)
                 assertFalse(isReplaySlice)
+                events.add("sync")
                 Result.success(SyncResult.NoData)
             },
             pauseBetweenSlices = { error("normal sync must not pause") },
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(listOf(now.toEpochMilli()), persistedAutomatic)
+        assertEquals(
+            listOf("sync", "automatic:${now.toEpochMilli()}", "general:$completion"),
+            events,
+        )
     }
 
     @Test
-    fun failedNormalRunDoesNotAdvanceAutomaticProgress() = runBlocking {
-        val existing = now.minusSeconds(24 * 3_600L).toEpochMilli()
-        val persistedAutomatic = mutableListOf<Long>()
+    fun legacySeededInstallPersistsSeedBeforeSyncThenAutomaticBeforeGeneral() = runBlocking {
+        val legacy = now.minusSeconds(24 * 3_600L).toEpochMilli()
+        val completion = now.plusSeconds(30).toEpochMilli()
+        val events = mutableListOf<String>()
 
         val result = SyncManager.runAutomaticSync(
-            automaticSyncMs = existing,
-            generalSyncMs = null,
+            automaticSyncMs = null,
+            generalSyncMs = legacy,
             now = now,
             syncType = "auto",
-            persistAutomaticSyncMs = persistedAutomatic::add,
-            persistGeneralSyncMs = { error("failed sync must not move general status") },
-            completionTimeMs = { error("failed normal sync does not need completion time") },
-            sync = { _, _, _, _ -> Result.failure(IllegalStateException("delivery failed")) },
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
+            completionTimeMs = { completion },
+            sync = { start, _, _, _ ->
+                assertEquals(Instant.ofEpochMilli(legacy), start)
+                events.add("sync")
+                Result.success(SyncResult.NoData)
+            },
             pauseBetweenSlices = { error("normal sync must not pause") },
         )
 
-        assertTrue(result.isFailure)
-        assertTrue(persistedAutomatic.isEmpty())
+        assertTrue(result.isSuccess)
+        assertEquals(
+            listOf("automatic:$legacy", "sync", "automatic:${now.toEpochMilli()}", "general:$completion"),
+            events,
+        )
     }
 
     @Test
@@ -140,7 +158,7 @@ class SyncManagerCatchUpTest {
             now = now,
             syncType = "auto",
             persistAutomaticSyncMs = { events.add("persist:$it") },
-            persistGeneralSyncMs = { error("normal sync owns the general timestamp") },
+            persistGeneralSyncMs = { error("failed sync must not move general status") },
             completionTimeMs = { error("failed normal sync does not need completion time") },
             sync = { _, _, _, _ ->
                 events.add("sync")
@@ -154,92 +172,132 @@ class SyncManagerCatchUpTest {
     }
 
     @Test
-    fun failedReplayPersistsOnlyCompletedSliceBoundary() = runBlocking {
-        val start = now.minusSeconds(3 * 24 * 3_600L).toEpochMilli()
-        val firstBoundary = start + sliceMs
-        val persistedAutomatic = mutableListOf<Long>()
-        val calls = mutableListOf<Pair<Instant?, Instant?>>()
+    fun successfulNormalRunPersistsAutomaticBoundaryBeforeGeneralStatus() = runBlocking {
+        val existing = now.minusSeconds(3 * 3_600L).toEpochMilli()
+        val newerGeneral = now.minusSeconds(60).toEpochMilli()
+        val completion = now.plusSeconds(30).toEpochMilli()
+        val events = mutableListOf<String>()
 
         val result = SyncManager.runAutomaticSync(
-            automaticSyncMs = start,
-            generalSyncMs = now.minusSeconds(3_600L).toEpochMilli(),
-            now = now,
-            syncType = "auto",
-            persistAutomaticSyncMs = persistedAutomatic::add,
-            persistGeneralSyncMs = { error("failed replay must not move general status") },
-            completionTimeMs = { error("failed replay does not need completion time") },
-            sync = { sliceStart, sliceEnd, type, isReplaySlice ->
-                assertEquals("catchup", type)
-                assertTrue(isReplaySlice)
-                calls.add(sliceStart to sliceEnd)
-                if (calls.size == 1) Result.success(SyncResult.NoData)
-                else Result.failure(IllegalStateException("second slice failed"))
-            },
-            pauseBetweenSlices = {},
-        )
-
-        assertTrue(result.isFailure)
-        assertEquals(2, calls.size)
-        assertEquals(listOf(firstBoundary), persistedAutomatic)
-    }
-
-    @Test
-    fun completedReplayCheckpointsEverySliceThenUpdatesGeneralStatusOnce() = runBlocking {
-        val start = now.minusSeconds(54 * 3_600L).toEpochMilli()
-        val completion = now.plusSeconds(5).toEpochMilli()
-        val persistedAutomatic = mutableListOf<Long>()
-        val persistedGeneral = mutableListOf<Long>()
-        var pauses = 0
-
-        val result = SyncManager.runAutomaticSync(
-            automaticSyncMs = start,
-            generalSyncMs = null,
-            now = now,
-            syncType = "auto",
-            persistAutomaticSyncMs = persistedAutomatic::add,
-            persistGeneralSyncMs = persistedGeneral::add,
-            completionTimeMs = { completion },
-            sync = { _, _, type, isReplaySlice ->
-                assertEquals("catchup", type)
-                assertTrue(isReplaySlice)
-                Result.success(SyncResult.NoData)
-            },
-            pauseBetweenSlices = { pauses++ },
-        )
-
-        assertTrue(result.isSuccess)
-        assertEquals(
-            listOf(start + sliceMs, start + 2 * sliceMs, now.toEpochMilli()),
-            persistedAutomatic,
-        )
-        assertEquals(listOf(completion), persistedGeneral)
-        assertEquals(2, pauses)
-    }
-
-    @Test
-    fun normalRunReadsFromAutomaticCursorDespiteNewerGeneralActivity() = runBlocking {
-        val automatic = now.minusSeconds(24 * 3_600L).toEpochMilli()
-        val newerGeneral = now.minusSeconds(3_600L).toEpochMilli()
-
-        val result = SyncManager.runAutomaticSync(
-            automaticSyncMs = automatic,
+            automaticSyncMs = existing,
             generalSyncMs = newerGeneral,
             now = now,
             syncType = "auto",
-            persistAutomaticSyncMs = {},
-            persistGeneralSyncMs = { error("normal sync owns the general timestamp") },
-            completionTimeMs = { error("normal sync does not need completion time") },
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
+            completionTimeMs = { completion },
             sync = { start, end, type, isReplaySlice ->
-                assertEquals(Instant.ofEpochMilli(automatic), start)
+                // Reads from the automatic cursor even though a newer general
+                // (manual/API) activity timestamp exists, so manual/API syncs
+                // cannot hide an automatic-delivery gap.
+                assertEquals(Instant.ofEpochMilli(existing), start)
                 assertEquals(now, end)
                 assertEquals("auto", type)
                 assertFalse(isReplaySlice)
+                events.add("sync")
                 Result.success(SyncResult.NoData)
             },
             pauseBetweenSlices = { error("normal sync must not pause") },
         )
 
         assertTrue(result.isSuccess)
+        assertEquals(
+            listOf("sync", "automatic:${now.toEpochMilli()}", "general:$completion"),
+            events,
+        )
+    }
+
+    @Test
+    fun normalFailurePersistsNeitherAutomaticNorGeneralStatus() = runBlocking {
+        val existing = now.minusSeconds(24 * 3_600L).toEpochMilli()
+        val events = mutableListOf<String>()
+
+        val result = SyncManager.runAutomaticSync(
+            automaticSyncMs = existing,
+            generalSyncMs = null,
+            now = now,
+            syncType = "auto",
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
+            completionTimeMs = { error("failed normal sync does not need completion time") },
+            sync = { _, _, _, _ ->
+                events.add("sync")
+                Result.failure(IllegalStateException("delivery failed"))
+            },
+            pauseBetweenSlices = { error("normal sync must not pause") },
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals(listOf("sync"), events)
+    }
+
+    @Test
+    fun completedReplayPersistsEverySliceBoundaryBeforeGeneralStatus() = runBlocking {
+        val start = now.minusSeconds(54 * 3_600L).toEpochMilli()
+        val completion = now.plusSeconds(5).toEpochMilli()
+        val events = mutableListOf<String>()
+
+        val result = SyncManager.runAutomaticSync(
+            automaticSyncMs = start,
+            generalSyncMs = null,
+            now = now,
+            syncType = "auto",
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
+            completionTimeMs = { completion },
+            sync = { _, _, type, isReplaySlice ->
+                assertEquals("catchup", type)
+                assertTrue(isReplaySlice)
+                events.add("sync")
+                Result.success(SyncResult.NoData)
+            },
+            pauseBetweenSlices = { events.add("pause") },
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(
+            listOf(
+                "sync", "automatic:${start + sliceMs}", "pause",
+                "sync", "automatic:${start + 2 * sliceMs}", "pause",
+                "sync", "automatic:${now.toEpochMilli()}",
+                "general:$completion",
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun failedReplayPersistsOnlyCompletedSliceBoundariesAndNeverGeneralStatus() = runBlocking {
+        val start = now.minusSeconds(3 * 24 * 3_600L).toEpochMilli()
+        val firstBoundary = start + sliceMs
+        val events = mutableListOf<String>()
+        var callCount = 0
+
+        val result = SyncManager.runAutomaticSync(
+            automaticSyncMs = start,
+            generalSyncMs = now.minusSeconds(3_600L).toEpochMilli(),
+            now = now,
+            syncType = "auto",
+            persistAutomaticSyncMs = { events.add("automatic:$it") },
+            persistGeneralSyncMs = { events.add("general:$it") },
+            completionTimeMs = { error("failed replay does not need completion time") },
+            sync = { _, _, type, isReplaySlice ->
+                assertEquals("catchup", type)
+                assertTrue(isReplaySlice)
+                callCount++
+                events.add("sync")
+                if (callCount == 1) Result.success(SyncResult.NoData)
+                else Result.failure(IllegalStateException("second slice failed"))
+            },
+            pauseBetweenSlices = { events.add("pause") },
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals(2, callCount)
+        assertEquals(
+            listOf("sync", "automatic:$firstBoundary", "pause", "sync"),
+            events,
+        )
     }
 
     @Test

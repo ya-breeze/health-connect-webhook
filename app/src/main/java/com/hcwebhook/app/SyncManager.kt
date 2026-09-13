@@ -1082,7 +1082,14 @@ class SyncManager(private val context: Context) {
             val requireAllWebhookDeliveries: Boolean,
         )
 
-        /** Maps orchestration boundaries to the normal or explicit-range sync path. */
+        /**
+         * Maps orchestration boundaries to the normal or explicit-range sync
+         * path. Automatic calls never let [SyncManager.performSync] update the
+         * general timestamp itself: [runAutomaticSync] owns that write and
+         * persists it only after the automatic boundary it corresponds to has
+         * already been persisted, so a crash between the two writes can never
+         * leave the general timestamp ahead of the automatic cursor.
+         */
         internal fun automaticSyncRequest(
             start: Instant?,
             boundary: Instant?,
@@ -1094,7 +1101,7 @@ class SyncManager(private val context: Context) {
                 end = if (isReplaySlice) boundary else null,
                 defaultReadEnd = if (isReplaySlice) null else boundary,
                 syncType = syncType,
-                updateLastSyncTime = !isReplaySlice,
+                updateLastSyncTime = false,
                 requireAllWebhookDeliveries = true,
             )
         }
@@ -1135,7 +1142,11 @@ class SyncManager(private val context: Context) {
                     ?.let(Instant::ofEpochMilli)
                 val result = sync(normalStart, now, syncType, false)
                 val nextCursor = nextAutomaticSyncCursor(cursorMs, now.toEpochMilli(), result.isSuccess)
+                // Automatic boundary first, general status second: a failure
+                // leaves nextCursor unchanged and result.isSuccess false, so
+                // neither write happens.
                 if (nextCursor != cursorMs) persistAutomaticSyncMs(nextCursor!!)
+                if (result.isSuccess) persistGeneralSyncMs(completionTimeMs())
                 return result
             }
 
