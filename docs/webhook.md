@@ -142,6 +142,8 @@ Unless noted otherwise, time-valued fields use **`java.time.Instant.toString()`*
 - **Scheduled / interval sync**
   Reads from a dedicated last-successful automatic cursor to a boundary captured before the read, independently of the general last-sync status and per-type watermarks updated by manual or local API activity. If that automatic-delivery gap exceeds 48 hours, the missed period is delivered oldest first as explicit 24-hour slices, using the same filtering and JSON or gRPC delivery paths as ordinary syncs, and is clamped to 30 days. Existing installs seed this cursor once from their general last-sync timestamp.
 
+  Every automatic read — normal or replay — additionally starts 24 hours before its committed cursor (also clamped to the 30-day catch-up horizon), so a record ingested or modified up to 24 hours after the cursor it should have appeared under is still included the next time that boundary is read. The committed cursor itself never moves backward for this: only the read window is widened. Delivery stays **at-least-once**; receivers dedupe using the identity fields in [Record metadata](#record-metadata) below. Backdating older than the 24-hour overlap falls outside this guarantee and needs an explicit-range sync (a chosen start/end, or local HTTP `?days=N`) to recover.
+
 Only types the user enabled **and** granted Health Connect permission for are read; others simply produce no arrays.
 
 ---
@@ -393,6 +395,29 @@ Health Connect can store multiple samples per interval; the app emits **one JSON
 | `celsius` | number | Temperature in °C. |
 | `measurement_location` | number (integer) | Measurement location (as defined by Health Connect constants). |
 | `time` | string | Measurement time. |
+
+---
+
+## Record metadata
+
+Every record object above carries an optional nested `metadata` object with the record's Health Connect provenance. The same fields, with the same names, are also on `RecordMetadata` in the Protobuf schema (`ProtobufPayloadBuilder.toProto()`), so JSON and gRPC receivers see identical identity data.
+
+| Field | Type | Always present | Description |
+|-------|------|-----------------|-------------|
+| `data_origin` | string | yes | Package name of the app that wrote the record. |
+| `recording_method` | string | yes | `"actively_recorded"`, `"automatically_recorded"`, or the raw Health Connect value. |
+| `device` | object | no | Present only if Health Connect reports device provenance; may include `manufacturer`, `model`, `type`. |
+| `id` | string | yes | Health Connect's stable record id. |
+| `client_record_id` | string | no | Writer-assigned id for correlating with the source app's own records. |
+| `client_record_version` | number (integer) | yes | Writer-assigned version; when the same `client_record_id` is re-sent, the higher version is the newer state. |
+| `last_modified_time` | string | no | ISO-8601 instant Health Connect last modified this record. |
+| `instant_zone_offset_seconds` | number (integer) | no | UTC offset at the record's instant, for instant records. Mutually exclusive with `interval_zone_offset`. |
+| `interval_zone_offset` | object | no | `{ "start_zone_offset_seconds", "end_zone_offset_seconds" }`, for interval records. Mutually exclusive with `instant_zone_offset_seconds`. |
+
+### Deduplication and upsert keys
+
+- **Raw records** (every array element whose `metadata.id` traces back to one Health Connect record): dedupe on `metadata.id`. Delivery is **at-least-once** — the same id can arrive again, most often from the [bounded late-ingestion overlap](#which-records-appear-incremental-vs-full-window) on scheduled sync. When two deliveries share an id, keep the one with the higher `client_record_version`, or the newer `last_modified_time` if version is absent or tied.
+- **Resolution-generated aggregates** (a daily total or an N-minute bucket produced by a data type's configured resolution, e.g. bucketed `steps` or `heart_rate`) are not a single Health Connect record. Some carry a `metadata` copied from one contributing sample, which is **not** a stable identity for the bucket — do not dedupe aggregates by `metadata.id`. Instead, treat each aggregate as an **upsert keyed by data type plus its bucket `start_time`/`end_time`** (or `time` for a daily total): a later delivery for the same data type and bucket window replaces the prior value rather than accumulating with it.
 
 ---
 

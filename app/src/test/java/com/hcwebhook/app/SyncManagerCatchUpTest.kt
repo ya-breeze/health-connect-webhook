@@ -3,6 +3,7 @@ package com.hcwebhook.app
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -133,7 +134,7 @@ class SyncManagerCatchUpTest {
             persistGeneralSyncMs = { events.add("general:$it") },
             completionTimeMs = { completion },
             sync = { start, _, _, _ ->
-                assertEquals(Instant.ofEpochMilli(legacy), start)
+                assertEquals(SyncManager.overlappedAutomaticReadStart(legacy, now), start)
                 events.add("sync")
                 Result.success(SyncResult.NoData)
             },
@@ -187,10 +188,11 @@ class SyncManagerCatchUpTest {
             persistGeneralSyncMs = { events.add("general:$it") },
             completionTimeMs = { completion },
             sync = { start, end, type, isReplaySlice ->
-                // Reads from the automatic cursor even though a newer general
-                // (manual/API) activity timestamp exists, so manual/API syncs
-                // cannot hide an automatic-delivery gap.
-                assertEquals(Instant.ofEpochMilli(existing), start)
+                // Reads from the automatic cursor (with its overlap applied)
+                // even though a newer general (manual/API) activity timestamp
+                // exists, so manual/API syncs cannot hide an automatic-delivery
+                // gap.
+                assertEquals(SyncManager.overlappedAutomaticReadStart(existing, now), start)
                 assertEquals(now, end)
                 assertEquals("auto", type)
                 assertFalse(isReplaySlice)
@@ -236,6 +238,7 @@ class SyncManagerCatchUpTest {
         val start = now.minusSeconds(54 * 3_600L).toEpochMilli()
         val completion = now.plusSeconds(5).toEpochMilli()
         val events = mutableListOf<String>()
+        val readStarts = mutableListOf<Instant?>()
 
         val result = SyncManager.runAutomaticSync(
             automaticSyncMs = start,
@@ -245,9 +248,10 @@ class SyncManagerCatchUpTest {
             persistAutomaticSyncMs = { events.add("automatic:$it") },
             persistGeneralSyncMs = { events.add("general:$it") },
             completionTimeMs = { completion },
-            sync = { _, _, type, isReplaySlice ->
+            sync = { sliceStart, _, type, isReplaySlice ->
                 assertEquals("catchup", type)
                 assertTrue(isReplaySlice)
+                readStarts.add(sliceStart)
                 events.add("sync")
                 Result.success(SyncResult.NoData)
             },
@@ -264,6 +268,74 @@ class SyncManagerCatchUpTest {
             ),
             events,
         )
+        // Each slice's read overlaps 24h before its own (already committed)
+        // start, but the checkpoints above still land on the un-overlapped
+        // slice boundaries.
+        assertEquals(
+            listOf(
+                SyncManager.overlappedAutomaticReadStart(start, now),
+                SyncManager.overlappedAutomaticReadStart(start + sliceMs, now),
+                SyncManager.overlappedAutomaticReadStart(start + 2 * sliceMs, now),
+            ),
+            readStarts,
+        )
+    }
+
+    @Test
+    fun overlapRecoversRecordsTimestampedShortlyBeforeTheCommittedCursor() {
+        val committed = now.minusSeconds(3 * 3_600L)
+        val lateRecordTimestamp = committed.minusSeconds(23 * 3_600L)
+
+        val readStart = SyncManager.overlappedAutomaticReadStart(committed.toEpochMilli(), now)
+
+        assertTrue(readStart.isBefore(committed))
+        assertFalse(readStart.isAfter(lateRecordTimestamp))
+    }
+
+    @Test
+    fun overlapDoesNotChangeTheCheckpointedBoundary() {
+        val committed = now.minusSeconds(3 * 3_600L).toEpochMilli()
+
+        val readStart = SyncManager.overlappedAutomaticReadStart(committed, now)
+        val nextCursor = SyncManager.nextAutomaticSyncCursor(committed, now.toEpochMilli(), syncSucceeded = true)
+
+        assertNotEquals(readStart.toEpochMilli(), nextCursor)
+        assertEquals(now.toEpochMilli(), nextCursor)
+    }
+
+    @Test
+    fun overlapNeverReadsBeforeTheThirtyDayCatchUpHorizon() {
+        val committed = now.minusSeconds(maxDays * 24 * 3_600L)
+
+        val readStart = SyncManager.overlappedAutomaticReadStart(committed.toEpochMilli(), now)
+
+        assertEquals(now.minusSeconds(maxDays * 24 * 3_600L), readStart)
+    }
+
+    @Test
+    fun clampedReplayFirstSliceOverlapStillHonorsTheThirtyDayHorizon() = runBlocking {
+        val tooOld = now.minusSeconds((maxDays + 10) * 24 * 3_600L).toEpochMilli()
+        val readStarts = mutableListOf<Instant?>()
+
+        val result = SyncManager.runAutomaticSync(
+            automaticSyncMs = tooOld,
+            generalSyncMs = null,
+            now = now,
+            syncType = "auto",
+            persistAutomaticSyncMs = {},
+            persistGeneralSyncMs = {},
+            completionTimeMs = { now.toEpochMilli() },
+            sync = { sliceStart, _, _, _ ->
+                readStarts.add(sliceStart)
+                Result.success(SyncResult.NoData)
+            },
+            pauseBetweenSlices = {},
+        )
+
+        assertTrue(result.isSuccess)
+        val horizon = now.minusSeconds(maxDays * 24 * 3_600L)
+        assertEquals(horizon, readStarts.first())
+        assertTrue(readStarts.none { it!!.isBefore(horizon) })
     }
 
     @Test

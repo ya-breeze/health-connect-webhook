@@ -37,13 +37,13 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 2: Recover bounded late ingestion without moving progress backward
 
-- [ ] Add a named 24-hour automatic overlap beside `GAP_THRESHOLD_HOURS`, `SLICE_HOURS`, and `MAX_CATCHUP_DAYS`, and centralize calculation of an automatic request’s effective read start.
-- [ ] Apply the overlap to normal automatic reads and replay slices that have a committed start, clamp it to the existing 30-day horizon, and continue checkpointing the original slice or run boundary rather than the overlapped start.
-- [ ] Keep first-use behavior unchanged when neither automatic nor legacy progress exists, and keep explicit manual/API ranges and per-type cursors outside the overlap policy.
-- [ ] Extend `putRecordMetadata` in `SyncManager.kt` to serialize the stable identity, version, modification-time, and applicable zone-offset fields already carried by `RecordMetadata`, matching the existing Protobuf representation and field names documented in `docs/webhook.md`.
-- [ ] Add orchestration regressions showing that a record timestamped before the committed cursor but within the overlap is inside the next automatic request, that the cursor still advances only to the captured boundary after success, and that the overlap never reads before the 30-day cap.
-- [ ] Update `README.md`, `docs/webhook.md`, and `docs/local-http.md` with the bounded late-ingestion guarantee, at-least-once delivery trade-off, raw-record deduplication keys, aggregate upsert key, and explicit-range recovery for older backdated data.
-- [ ] Mark completed
+- [x] Add a named 24-hour automatic overlap beside `GAP_THRESHOLD_HOURS`, `SLICE_HOURS`, and `MAX_CATCHUP_DAYS`, and centralize calculation of an automatic request’s effective read start.
+- [x] Apply the overlap to normal automatic reads and replay slices that have a committed start, clamp it to the existing 30-day horizon, and continue checkpointing the original slice or run boundary rather than the overlapped start.
+- [x] Keep first-use behavior unchanged when neither automatic nor legacy progress exists, and keep explicit manual/API ranges and per-type cursors outside the overlap policy.
+- [x] Extend `putRecordMetadata` in `SyncManager.kt` to serialize the stable identity, version, modification-time, and applicable zone-offset fields already carried by `RecordMetadata`, matching the existing Protobuf representation and field names documented in `docs/webhook.md`.
+- [x] Add orchestration regressions showing that a record timestamped before the committed cursor but within the overlap is inside the next automatic request, that the cursor still advances only to the captured boundary after success, and that the overlap never reads before the 30-day cap.
+- [x] Update `README.md`, `docs/webhook.md`, and `docs/local-http.md` with the bounded late-ingestion guarantee, at-least-once delivery trade-off, raw-record deduplication keys, aggregate upsert key, and explicit-range recovery for older backdated data.
+- [x] Mark completed
 
 ### Task 3: Test partial delivery through the production aggregation path
 

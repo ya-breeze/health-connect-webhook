@@ -15,7 +15,12 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import java.time.Instant
 
-/** Emit a record's Health Connect provenance as a nested "metadata" object. */
+/**
+ * Emit a record's Health Connect provenance as a nested "metadata" object.
+ * Field names mirror [ProtobufPayloadBuilder]'s `RecordMetadata.toProto()`
+ * so JSON and gRPC receivers can dedupe the same raw record by `id` plus
+ * `client_record_version` or `last_modified_time`, per docs/webhook.md.
+ */
 private fun JsonObjectBuilder.putRecordMetadata(meta: RecordMetadata) {
     putJsonObject("metadata") {
         put("data_origin", meta.dataOrigin)
@@ -25,6 +30,18 @@ private fun JsonObjectBuilder.putRecordMetadata(meta: RecordMetadata) {
                 meta.deviceManufacturer?.let { put("manufacturer", it) }
                 meta.deviceModel?.let { put("model", it) }
                 meta.deviceType?.let { put("type", it) }
+            }
+        }
+        put("id", meta.id)
+        meta.clientRecordId?.let { put("client_record_id", it) }
+        put("client_record_version", meta.clientRecordVersion)
+        meta.lastModifiedTime?.let { put("last_modified_time", it.toString()) }
+        if (meta.zoneOffsetSeconds != null) {
+            put("instant_zone_offset_seconds", meta.zoneOffsetSeconds)
+        } else if (meta.startZoneOffsetSeconds != null || meta.endZoneOffsetSeconds != null) {
+            putJsonObject("interval_zone_offset") {
+                meta.startZoneOffsetSeconds?.let { put("start_zone_offset_seconds", it) }
+                meta.endZoneOffsetSeconds?.let { put("end_zone_offset_seconds", it) }
             }
         }
     }
@@ -1041,6 +1058,28 @@ class SyncManager(private val context: Context) {
         private const val SLICE_HOURS = 24L
         private const val INTER_SLICE_DELAY_MS = 500L
 
+        /**
+         * Recovers records ingested or modified shortly before a previously
+         * committed automatic boundary without moving that boundary itself.
+         * Bounded to one slice so the guarantee stays documented and finite.
+         */
+        private const val AUTOMATIC_OVERLAP_HOURS = 24L
+
+        /**
+         * Centralizes the effective read start for an automatic request that
+         * has a committed automatic boundary (a normal read's cursor, or a
+         * replay slice's start). Subtracts [AUTOMATIC_OVERLAP_HOURS] from
+         * [committedBoundaryMs] and clamps the result to the existing 30-day
+         * catch-up horizon. The checkpoint written for the request stays the
+         * original, non-overlapped boundary.
+         */
+        internal fun overlappedAutomaticReadStart(committedBoundaryMs: Long, now: Instant): Instant {
+            val overlapMs = AUTOMATIC_OVERLAP_HOURS * 3_600_000L
+            val earliestAllowedMs = now.toEpochMilli() - MAX_CATCHUP_DAYS * 24L * 3_600_000L
+            val overlappedMs = maxOf(committedBoundaryMs - overlapMs, earliestAllowedMs)
+            return Instant.ofEpochMilli(overlappedMs)
+        }
+
         internal data class AutomaticSyncCursorSelection(
             val timestampMs: Long?,
             val seededFromGeneral: Boolean,
@@ -1139,7 +1178,7 @@ class SyncManager(private val context: Context) {
             if (slices == null) {
                 val normalStart = cursorMs
                     ?.takeIf { it <= now.toEpochMilli() }
-                    ?.let(Instant::ofEpochMilli)
+                    ?.let { overlappedAutomaticReadStart(it, now) }
                 val result = sync(normalStart, now, syncType, false)
                 val nextCursor = nextAutomaticSyncCursor(cursorMs, now.toEpochMilli(), result.isSuccess)
                 // Automatic boundary first, general status second: a failure
@@ -1152,7 +1191,8 @@ class SyncManager(private val context: Context) {
 
             var lastResult: Result<SyncResult> = Result.success(SyncResult.NoData)
             for ((sliceStart, sliceEnd) in slices) {
-                val result = sync(sliceStart, sliceEnd, "catchup", true)
+                val readStart = overlappedAutomaticReadStart(sliceStart.toEpochMilli(), now)
+                val result = sync(readStart, sliceEnd, "catchup", true)
                 val nextCursor = nextAutomaticSyncCursor(
                     currentCursorMs = cursorMs,
                     completedBoundaryMs = sliceEnd.toEpochMilli(),

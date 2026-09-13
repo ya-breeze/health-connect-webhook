@@ -40,6 +40,12 @@ Interval and scheduled syncs keep dedicated last-successful automatic progress.
 After a gap longer than the normal 48-hour window, they replay missed delivery
 in 24-hour slices (up to 30 days). Manual sync and local API activity can update
 the displayed last-sync status, but never move this automatic catch-up cursor.
+Every automatic read also looks 24 hours behind its cursor, so a record
+ingested or modified shortly after the cursor passed it is still delivered
+at-least-once on the next automatic run; see
+[docs/webhook.md](docs/webhook.md#deduplication-and-upsert-keys) for the
+receiver-side dedup keys this relies on. Older backdated data needs an
+explicit-range sync to recover.
 
 ## Install
 
