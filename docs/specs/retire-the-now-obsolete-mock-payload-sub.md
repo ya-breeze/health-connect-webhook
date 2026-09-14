@@ -13,6 +13,10 @@ Restore `docs/upstream-pr/mock-payload-measurement-location.md` as a concise arc
 
 Keeping the remote branch preserves provenance and avoids destructive cleanup, at the cost of leaving an obsolete ref visible; the documentation must therefore make its archival status unmistakable and must contain no ready-to-run pull-request command for it. This documentation-only change does not alter `MockPayloadBuilder.kt`, `SyncManager.kt`, `docs/webhook.md`, or any upstream-ready catch-up code. It must not delete or rewrite a local or remote branch, push changes to `mcnaveen/health-connect-webhook`, open an upstream pull request, or modify the existing decisions concerning dependency commit `299e41e0` and cleartext-network commit `07030b59`.
 
+## Validation Commands
+
+No validation commands are configured for this documentation-only change.
+
 ## Ground rules
 This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
 
