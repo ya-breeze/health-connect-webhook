@@ -13,6 +13,13 @@ Restore `docs/upstream-pr/mock-payload-measurement-location.md` as a concise arc
 
 Keeping the remote branch preserves provenance and avoids destructive cleanup, at the cost of leaving an obsolete ref visible; the documentation must therefore make its archival status unmistakable and must contain no ready-to-run pull-request command for it. This documentation-only change does not alter `MockPayloadBuilder.kt`, `SyncManager.kt`, `docs/webhook.md`, or any upstream-ready catch-up code. It must not delete or rewrite a local or remote branch, push changes to `mcnaveen/health-connect-webhook`, open an upstream pull request, or modify the existing decisions concerning dependency commit `299e41e0` and cleartext-network commit `07030b59`.
 
+## Ground rules
+This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
+
+Tick the boxes in this file as the work is completed; they are the record of progress, and the pipeline reads them to decide whether the change is finished.
+
+Out of scope, deliberately: do NOT mark the pull request ready for review and do NOT call a forge merge API. Implementation marks the pull request ready only after the task list is complete. Afterward Completion may ask the Store to perform Automatic Merge only when the planner and final implementation agent authorized the exact result. Leave the pull request in a state worth reading.
+
 ### Task 1: Record the upstream resolution
 
 - [ ] Recreate `docs/upstream-pr/mock-payload-measurement-location.md` as an archival outcome record, replacing the former pull-request-template framing with the original mismatch, obsolete fork commit `db725ec9ee2793bd40e38a37d8a286080bbd3b1a`, and superseding upstream commit `1f903824ea05a111fecb34689b1bdb7c64614dcb`.
