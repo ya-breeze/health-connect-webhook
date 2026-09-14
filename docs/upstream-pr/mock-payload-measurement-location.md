@@ -25,8 +25,8 @@ the same integer-producing model as `SyncManager.buildJsonPayload` and the publi
 ## Disposition
 
 `fix/mock-payload-measurement-location` is obsolete and retained only for historical
-provenance. It is not an upstream pull-request candidate, and no pull request should be
-opened from that branch. The branch and its commit are left untouched so the superseded
-candidate remains traceable.
+provenance. It is not an upstream pull-request candidate, and no mock-payload pull request
+should be opened from that branch. The branch and its commit are left untouched so the
+superseded candidate remains traceable.
 
 Created by Codex

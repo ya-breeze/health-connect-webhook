@@ -34,7 +34,16 @@ gh pr create --repo mcnaveen/health-connect-webhook \
 
 ## Obsolete mock-payload submission
 
-Do not open the previous mock-payload pull request. Current upstream already emits integer `measurement_location` values from `MockPayloadBuilder.kt`, matching `SyncManager.kt`, `docs/webhook.md`, and the current payload contract. The obsolete pull-request body and ready-to-run command have been removed; cleanup of its separate fork branch remains deferred.
+Do not open a mock-payload pull request. The archival outcome is recorded in
+[`mock-payload-measurement-location.md`](./mock-payload-measurement-location.md), and
+upstream commit [`1f903824ea05a111fecb34689b1bdb7c64614dcb`](https://github.com/mcnaveen/health-connect-webhook/commit/1f903824ea05a111fecb34689b1bdb7c64614dcb)
+already rebuilt `MockPayloadBuilder.kt` to emit integer `measurement_location` values,
+matching `SyncManager.kt`, `docs/webhook.md`, and the current payload contract.
+
+The fork branch `fix/mock-payload-measurement-location` at
+`db725ec9ee2793bd40e38a37d8a286080bbd3b1a` is retained as historical provenance only;
+it is obsolete, not an actionable candidate, and must not be used to open a pull request.
+There is no submission command or checklist for this archival branch.
 
 ## Excluded fork-only work
 

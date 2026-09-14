@@ -31,8 +31,8 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 2: Make the handoff consistently archival
 
-- [ ] Update the `Obsolete mock-payload submission` section of `docs/upstream-pr/README.md` to link `mock-payload-measurement-location.md`, name the superseding upstream commit, and identify `fix/mock-payload-measurement-location` at `db725ec9ee2793bd40e38a37d8a286080bbd3b1a` as a retained historical branch rather than an actionable candidate.
-- [ ] Ensure the three upstream-handoff documents consistently say that no mock-payload pull request should be opened and contain no command or checklist that presents the archival branch as ready for submission.
-- [ ] Leave the catch-up candidate instructions and the existing `299e41e0` dependency and `07030b59` cleartext-network exclusion rationale unchanged except for any minimal wording needed to keep headings or cross-links accurate.
-- [ ] Confirm the change is limited to `docs/upstream-pr/README.md`, `docs/upstream-pr/mock-payload-measurement-location.md`, and `docs/upstream-pr/prior-art.md`; do not change application code or local/remote branch refs.
-- [ ] Mark completed
+- [x] Update the `Obsolete mock-payload submission` section of `docs/upstream-pr/README.md` to link `mock-payload-measurement-location.md`, name the superseding upstream commit, and identify `fix/mock-payload-measurement-location` at `db725ec9ee2793bd40e38a37d8a286080bbd3b1a` as a retained historical branch rather than an actionable candidate.
+- [x] Ensure the three upstream-handoff documents consistently say that no mock-payload pull request should be opened and contain no command or checklist that presents the archival branch as ready for submission.
+- [x] Leave the catch-up candidate instructions and the existing `299e41e0` dependency and `07030b59` cleartext-network exclusion rationale unchanged except for any minimal wording needed to keep headings or cross-links accurate.
+- [x] Confirm the change is limited to `docs/upstream-pr/README.md`, `docs/upstream-pr/mock-payload-measurement-location.md`, and `docs/upstream-pr/prior-art.md`; do not change application code or local/remote branch refs.
+- [x] Mark completed
