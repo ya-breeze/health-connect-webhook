@@ -41,6 +41,25 @@ redaction).
 
 **Verdict: no prior rejection found.** Nothing to answer or work around in the pull request body.
 
+## Mock payload `measurement_location` mismatch
+
+Searched for `measurement_location` and `mock payload`:
+
+| Search term | Hits | Verdict |
+|---|---|---|
+| `measurement_location` | #25 "Add support for SkinTemperatureRecord" (closed, merged the feature) | Not the same bug. #25 is the original feature request that introduced `measurement_location` to the payload; it does not mention the mock endpoint or the string/int mismatch. It does confirm the field is documented as coming from Health Connect's integer `measurementLocation`, corroborating that the mock's string value was wrong. |
+| `mock payload` | #65, #62 (both merged feature PRs) | Not related — matched on unrelated payload-field additions, no mention of the mock endpoint. |
+
+The old fork candidate was `fix/mock-payload-measurement-location` at
+`db725ec9ee2793bd40e38a37d8a286080bbd3b1a`. It was superseded independently upstream by
+commit [`1f903824ea05a111fecb34689b1bdb7c64614dcb`](https://github.com/mcnaveen/health-connect-webhook/commit/1f903824ea05a111fecb34689b1bdb7c64614dcb),
+which rebuilt `MockPayloadBuilder.build` around the shared mock `HealthData` and now
+serializes `SkinTemperatureData.measurementLocation` as an integer, consistent with
+`SyncManager.buildJsonPayload` and `docs/webhook.md`.
+
+**Verdict: resolved independently upstream.** The old branch is obsolete and archival;
+no mock-payload pull request should be opened from it.
+
 ## Why the remaining side commits are not going upstream
 
 **`299e41e0` (dependency bump: Kotlin 2.1.21, Compose BOM 2025.09.01.00).** A version bump like

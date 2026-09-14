@@ -22,12 +22,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Record the upstream resolution
 
-- [ ] Recreate `docs/upstream-pr/mock-payload-measurement-location.md` as an archival outcome record, replacing the former pull-request-template framing with the original mismatch, obsolete fork commit `db725ec9ee2793bd40e38a37d8a286080bbd3b1a`, and superseding upstream commit `1f903824ea05a111fecb34689b1bdb7c64614dcb`.
-- [ ] Explain that upstream commit `1f903824ea05a111fecb34689b1bdb7c64614dcb` changed `MockPayloadBuilder.build` to serialize `skin.measurementLocation` from the shared mock `HealthData`, producing an integer consistent with `SyncManager.buildJsonPayload` and `docs/webhook.md`.
-- [ ] State prominently that `fix/mock-payload-measurement-location` is obsolete and archival, is not an upstream pull-request candidate, and must not be used to open a pull request; omit the former PR checklist, placeholder issue links, and `gh pr create` command.
-- [ ] Preserve the repository’s agent-authored documentation convention by ending the restored record with `Created by Codex`.
-- [ ] Update `docs/upstream-pr/prior-art.md` with a dedicated mock-payload section that retains the earlier issue/PR search evidence, records the later upstream resolution, links or names the full superseding commit, and changes the verdict to resolved independently upstream rather than still awaiting submission.
-- [ ] Mark completed
+- [x] Recreate `docs/upstream-pr/mock-payload-measurement-location.md` as an archival outcome record, replacing the former pull-request-template framing with the original mismatch, obsolete fork commit `db725ec9ee2793bd40e38a37d8a286080bbd3b1a`, and superseding upstream commit `1f903824ea05a111fecb34689b1bdb7c64614dcb`.
+- [x] Explain that upstream commit `1f903824ea05a111fecb34689b1bdb7c64614dcb` changed `MockPayloadBuilder.build` to serialize `skin.measurementLocation` from the shared mock `HealthData`, producing an integer consistent with `SyncManager.buildJsonPayload` and `docs/webhook.md`.
+- [x] State prominently that `fix/mock-payload-measurement-location` is obsolete and archival, is not an upstream pull-request candidate, and must not be used to open a pull request; omit the former PR checklist, placeholder issue links, and `gh pr create` command.
+- [x] Preserve the repository’s agent-authored documentation convention by ending the restored record with `Created by Codex`.
+- [x] Update `docs/upstream-pr/prior-art.md` with a dedicated mock-payload section that retains the earlier issue/PR search evidence, records the later upstream resolution, links or names the full superseding commit, and changes the verdict to resolved independently upstream rather than still awaiting submission.
+- [x] Mark completed
 
 ### Task 2: Make the handoff consistently archival
 
