@@ -35,12 +35,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 2: Add race-safe lifecycle coordination
 
-- [ ] Introduce an internal production-used lifecycle coordinator beside `SyncForegroundService` that owns the active `Job`, newest start ID, retained schedule IDs, and an idempotent completion generation under one synchronization strategy.
-- [ ] Make its start operation retain each non-null schedule ID and update the newest start ID before returning either a launch decision for an idle service or a coalesced decision for an active service.
-- [ ] Ensure a coalesced start performs no stop, cancellation, immediate reschedule, or second sync launch.
-- [ ] Make normal completion atomically detach the completed generation, drain its retained schedule IDs, and identify the newest start ID that may safely be stopped; a start arriving after that transition must launch a new generation and be protected from the stale completion.
-- [ ] Make timeout cancellation and completion idempotent so the cancelled coroutine's `finally` block cannot reschedule or stop the service a second time.
-- [ ] Mark completed
+- [x] Introduce an internal production-used lifecycle coordinator beside `SyncForegroundService` that owns the active `Job`, newest start ID, retained schedule IDs, and an idempotent completion generation under one synchronization strategy.
+- [x] Make its start operation retain each non-null schedule ID and update the newest start ID before returning either a launch decision for an idle service or a coalesced decision for an active service.
+- [x] Ensure a coalesced start performs no stop, cancellation, immediate reschedule, or second sync launch.
+- [x] Make normal completion atomically detach the completed generation, drain its retained schedule IDs, and identify the newest start ID that may safely be stopped; a start arriving after that transition must launch a new generation and be protected from the stale completion.
+- [x] Make timeout cancellation and completion idempotent so the cancelled coroutine's `finally` block cannot reschedule or stop the service a second time.
+- [x] Mark completed
 
 ### Task 3: Wire `SyncForegroundService` through the coordinator
 
