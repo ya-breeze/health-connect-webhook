@@ -64,7 +64,7 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 5: Validate the isolated lifecycle change
 
-- [ ] Run `./gradlew test` and confirm the new lifecycle regressions execute for both application flavors alongside `SyncManagerCatchUpTest`.
-- [ ] Run `./gradlew assembleDebug` and `./gradlew lint`, fixing any regression introduced by the service refactor without weakening existing lint or tests.
-- [ ] Inspect the resulting change so it remains limited to `SyncForegroundService.kt`, its lifecycle tests, and only directly necessary supporting code; do not update or publish the final upstream candidate or its handoff records in this part.
-- [ ] Mark completed
+- [x] Run `./gradlew test` and confirm the new lifecycle regressions execute for both application flavors alongside `SyncManagerCatchUpTest`.
+- [x] Run `./gradlew assembleDebug` and `./gradlew lint`, fixing any regression introduced by the service refactor without weakening existing lint or tests.
+- [x] Inspect the resulting change so it remains limited to `SyncForegroundService.kt`, its lifecycle tests, and only directly necessary supporting code; do not update or publish the final upstream candidate or its handoff records in this part.
+- [x] Mark completed
