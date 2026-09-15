@@ -276,15 +276,17 @@ internal class SyncForegroundServiceLifecycleCoordinator(
     }
 
     private fun applyFinish(finish: Finish) {
-        finish.scheduleIds.forEach(rescheduleAlarm)
-
-        // A newer generation may have launched while the old generation's effects were
-        // being applied. In that case its eventual completion owns the stop request.
-        val mayRequestStop = synchronized(lock) {
-            !destroyed && activeGeneration == null
-        }
-        if (mayRequestStop) {
-            finish.stopStartId?.let(requestStop)
+        try {
+            finish.scheduleIds.forEach(rescheduleAlarm)
+        } finally {
+            // A newer generation may have launched while the old generation's effects were
+            // being applied. In that case its eventual completion owns the stop request.
+            val mayRequestStop = synchronized(lock) {
+                !destroyed && activeGeneration == null
+            }
+            if (mayRequestStop) {
+                finish.stopStartId?.let(requestStop)
+            }
         }
     }
 
