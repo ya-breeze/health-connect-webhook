@@ -77,15 +77,17 @@ class SyncForegroundServiceLifecycleTest {
         val rescheduled = mutableListOf<String>()
         val stopped = mutableListOf<Int>()
         val release = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
         var cancellations = 0
         var cleanupCount = 0
         val jobs = mutableListOf<Job>()
         lateinit var coordinator: SyncForegroundServiceLifecycleCoordinator
         coordinator = coordinator(rescheduled, stopped)
 
-        val first = coordinator.start(1, "first") { generation ->
+        coordinator.start(1, "first") { generation ->
             launch {
                 try {
+                    started.complete(Unit)
                     release.await()
                 } catch (error: CancellationException) {
                     cancellations++
@@ -97,6 +99,7 @@ class SyncForegroundServiceLifecycleTest {
             }.also { jobs += it }
         }
         coordinator.start(2, "second") { error("duplicate must not launch") }
+        started.await()
 
         coordinator.timeout()
 
@@ -140,6 +143,7 @@ class SyncForegroundServiceLifecycleTest {
         val rescheduled = mutableListOf<String>()
         val stopped = mutableListOf<Int>()
         val release = CompletableDeferred<Unit>()
+        val started = CompletableDeferred<Unit>()
         var cancellations = 0
         var cleanupCount = 0
         val jobs = mutableListOf<Job>()
@@ -149,6 +153,7 @@ class SyncForegroundServiceLifecycleTest {
         val job = coordinator.start(7, "scheduled") { generation ->
             launch {
                 try {
+                    started.complete(Unit)
                     release.await()
                 } catch (error: CancellationException) {
                     cancellations++
@@ -160,6 +165,7 @@ class SyncForegroundServiceLifecycleTest {
             }.also { jobs += it }
         }
 
+        started.await()
         coordinator.destroy()
         jobs.single().join()
 
