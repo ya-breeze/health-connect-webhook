@@ -28,10 +28,10 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Preserve the corrected catch-up baseline
 
-- [ ] Base the lifecycle work on the data-integrity implementation represented by `feat/offline-catchup-sync-corrected` at `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf`, as incorporated into this branch, rather than the stale `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` candidate.
-- [ ] Keep the corrected `SyncManager.performSyncWithCatchUp`, automatic cursor ordering, overlap, JSON metadata, and webhook delivery coordinator behavior unchanged while isolating the service fix.
-- [ ] Record the lifecycle invariants in code comments near the new coordination state: one active run per service instance, every start contributes its newest start ID and optional schedule ID, and only completion or timeout may request a stop.
-- [ ] Mark completed
+- [x] Base the lifecycle work on the data-integrity implementation represented by `feat/offline-catchup-sync-corrected` at `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf`, as incorporated into this branch, rather than the stale `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` candidate.
+- [x] Keep the corrected `SyncManager.performSyncWithCatchUp`, automatic cursor ordering, overlap, JSON metadata, and webhook delivery coordinator behavior unchanged while isolating the service fix.
+- [x] Record the lifecycle invariants in code comments near the new coordination state: one active run per service instance, every start contributes its newest start ID and optional schedule ID, and only completion or timeout may request a stop.
+- [x] Mark completed
 
 ### Task 2: Add race-safe lifecycle coordination
 
