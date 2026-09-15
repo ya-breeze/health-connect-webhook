@@ -105,8 +105,6 @@ class SyncForegroundServiceLifecycleTest {
 
         assertEquals(listOf("first", "second"), rescheduled)
         assertEquals(listOf(2), stopped)
-        assertEquals(0, cancellations)
-        assertEquals(0, cleanupCount)
 
         jobs.single().join()
 

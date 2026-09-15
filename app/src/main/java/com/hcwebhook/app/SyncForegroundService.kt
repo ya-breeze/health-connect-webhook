@@ -107,7 +107,7 @@ class SyncForegroundService : Service() {
      * ForegroundServiceDidNotStopInTimeException.
      */
     override fun onTimeout(startId: Int, fgsType: Int) {
-        Log.w(TAG, "dataSync FGS timeout (fgsType=$fgsType); cancelling sync")
+        Log.w(TAG, "dataSync FGS timeout (callbackStartId=$startId, fgsType=$fgsType); cancelling sync")
         lifecycleCoordinator.timeout()
     }
 
