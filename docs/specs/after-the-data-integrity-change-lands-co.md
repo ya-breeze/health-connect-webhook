@@ -54,13 +54,13 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 4: Add lifecycle regression coverage
 
-- [ ] Add `app/src/test/java/com/hcwebhook/app/SyncForegroundServiceLifecycleTest.kt` covering the internal coordinator used by the production service, using a controllably suspended coroutine and recorded launch, cancellation, reschedule, and stop effects.
-- [ ] Prove that start ID 1 launches one run and a duplicate start ID 2 launches no second run, emits no stop request, emits no cancellation, leaves the original coroutine active, and retains both distinct schedule IDs.
-- [ ] Release the surviving run and prove retained schedule IDs are each rescheduled once and the sole stop request uses newest start ID 2 rather than the original ID.
-- [ ] Cover repeated identical schedule IDs and null schedule IDs so coalescing neither duplicates alarms nor invents scheduled work.
-- [ ] Cover timeout after duplicate starts: the active coroutine is cancelled once, retained schedules are handled once, the newest start is stopped once, and the cancelled coroutine's eventual cleanup produces no duplicate effects.
-- [ ] Cover a start racing with or following completion so a stale generation cannot cancel or stop the newly launched run, plus external destruction so an actually active coroutine is cancelled.
-- [ ] Mark completed
+- [x] Add `app/src/test/java/com/hcwebhook/app/SyncForegroundServiceLifecycleTest.kt` covering the internal coordinator used by the production service, using a controllably suspended coroutine and recorded launch, cancellation, reschedule, and stop effects.
+- [x] Prove that start ID 1 launches one run and a duplicate start ID 2 launches no second run, emits no stop request, emits no cancellation, leaves the original coroutine active, and retains both distinct schedule IDs.
+- [x] Release the surviving run and prove retained schedule IDs are each rescheduled once and the sole stop request uses newest start ID 2 rather than the original ID.
+- [x] Cover repeated identical schedule IDs and null schedule IDs so coalescing neither duplicates alarms nor invents scheduled work.
+- [x] Cover timeout after duplicate starts: the active coroutine is cancelled once, retained schedules are handled once, the newest start is stopped once, and the cancelled coroutine's eventual cleanup produces no duplicate effects.
+- [x] Cover a start racing with or following completion so a stale generation cannot cancel or stop the newly launched run, plus external destruction so an actually active coroutine is cancelled.
+- [x] Mark completed
 
 ### Task 5: Validate the isolated lifecycle change
 
