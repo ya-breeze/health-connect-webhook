@@ -73,6 +73,32 @@ class SyncForegroundServiceLifecycleTest {
     }
 
     @Test
+    fun rescheduleFailureDoesNotLoseLaterSchedulesOrStopRequest() {
+        val attempted = mutableListOf<String>()
+        val failures = mutableListOf<Pair<String, Exception>>()
+        val stopped = mutableListOf<Int>()
+        val expectedFailure = IllegalStateException("alarm unavailable")
+        val coordinator = SyncForegroundServiceLifecycleCoordinator(
+            rescheduleAlarm = { scheduleId ->
+                attempted += scheduleId
+                if (scheduleId == "first") throw expectedFailure
+            },
+            reportRescheduleFailure = { scheduleId, error -> failures += scheduleId to error },
+            requestStop = stopped::add,
+        )
+        val job = Job()
+        val first = coordinator.start(1, "first") { job }
+        coordinator.start(2, "second") { error("duplicate must not launch") }
+
+        coordinator.complete(first.generation)
+
+        assertEquals(listOf("first", "second"), attempted)
+        assertEquals(listOf("first" to expectedFailure), failures)
+        assertEquals(listOf(2), stopped)
+        job.cancel()
+    }
+
+    @Test
     fun timeoutCancelsOnceAndLateCoroutineCleanupHasNoEffects() = runBlocking {
         val rescheduled = mutableListOf<String>()
         val stopped = mutableListOf<Int>()
@@ -179,6 +205,7 @@ class SyncForegroundServiceLifecycleTest {
         stopped: MutableList<Int>,
     ) = SyncForegroundServiceLifecycleCoordinator(
         rescheduleAlarm = rescheduled::add,
+        reportRescheduleFailure = { _, error -> throw error },
         requestStop = stopped::add,
     )
 }

@@ -38,6 +38,9 @@ class SyncForegroundService : Service() {
     private val syncManager: SyncManager by lazy { SyncManager(this) }
     private val lifecycleCoordinator = SyncForegroundServiceLifecycleCoordinator(
         rescheduleAlarm = ::rescheduleAlarmIfNeeded,
+        reportRescheduleFailure = { scheduleId, error ->
+            Log.e(TAG, "Failed to reschedule alarm: $scheduleId: ${error.message}", error)
+        },
         requestStop = { newestStartId ->
             if (stopSelfResult(newestStartId)) {
                 Log.d(TAG, "Stopped foreground sync for newest startId=$newestStartId")
@@ -186,6 +189,7 @@ internal data class SyncForegroundServiceStartDecision(
  */
 internal class SyncForegroundServiceLifecycleCoordinator(
     private val rescheduleAlarm: (String) -> Unit,
+    private val reportRescheduleFailure: (String, Exception) -> Unit,
     private val requestStop: (Int) -> Unit,
 ) {
 
@@ -277,7 +281,15 @@ internal class SyncForegroundServiceLifecycleCoordinator(
 
     private fun applyFinish(finish: Finish) {
         try {
-            finish.scheduleIds.forEach(rescheduleAlarm)
+            finish.scheduleIds.forEach { scheduleId ->
+                try {
+                    rescheduleAlarm(scheduleId)
+                } catch (error: Exception) {
+                    // One broken alarm must not lose the other coalesced schedules or prevent
+                    // the foreground service from stopping, especially on the timeout path.
+                    reportRescheduleFailure(scheduleId, error)
+                }
+            }
         } finally {
             // A newer generation may have launched while the old generation's effects were
             // being applied. In that case its eventual completion owns the stop request.
