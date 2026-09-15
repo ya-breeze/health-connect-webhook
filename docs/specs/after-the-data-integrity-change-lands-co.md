@@ -19,6 +19,13 @@ Keep the Android-facing service thin and expose only an internal, production-use
 
 Final upstream-candidate assembly, the pinned-SHA Review Gate, publication of `origin/feat/offline-catchup-sync-upstream`, and handoff-document refresh are deferred to the follow-up because they form a distinct release-integrity change that depends on this lifecycle fix landing. Nothing in this part may create, comment on, or merge an artifact in `mcnaveen/health-connect-webhook`. The eventual owner-only command remains `gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:feat/offline-catchup-sync-upstream --base main --body-file docs/upstream-pr/offline-catchup-sync.md`; document it in the final handoff, but do not execute it.
 
+## Ground rules
+This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
+
+Tick the boxes in this file as the work is completed; they are the record of progress, and the pipeline reads them to decide whether the change is finished.
+
+Out of scope, deliberately: do NOT mark the pull request ready for review and do NOT call a forge merge API. Implementation marks the pull request ready only after the task list is complete. Afterward Completion may ask the Store to perform Automatic Merge only when the planner and final implementation agent authorized the exact result. Leave the pull request in a state worth reading.
+
 ### Task 1: Preserve the corrected catch-up baseline
 
 - [ ] Base the lifecycle work on the data-integrity implementation represented by `feat/offline-catchup-sync-corrected` at `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf`, as incorporated into this branch, rather than the stale `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` candidate.
