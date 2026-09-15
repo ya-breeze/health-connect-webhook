@@ -44,13 +44,13 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 3: Wire `SyncForegroundService` through the coordinator
 
-- [ ] Replace companion `isSyncRunning` and its `AtomicBoolean` import with instance-scoped coordination in `SyncForegroundService.kt`.
-- [ ] Update `onStartCommand` to delegate every start, launch `syncManager.performSyncWithCatchUp(syncType = "auto")` only for the surviving generation, and return `START_NOT_STICKY` without calling `stopSelf(startId)` for duplicates.
-- [ ] Route successful results, returned failures, thrown exceptions, and `OutOfMemoryError` through the same finalization path, rescheduling each retained ID once via `rescheduleAlarmIfNeeded` before stopping against the newest safe start ID.
-- [ ] Update `onTimeout` to cancel the surviving run and finalize against the coordinator's newest start state rather than blindly clearing a global flag and stopping the callback's possibly stale ID.
-- [ ] Keep `onDestroy` safe for both normal self-stop and external destruction: it must release coordinator resources and cancel genuinely active work without allowing an old completion to affect a later generation.
-- [ ] Refresh the service KDoc and logs so they describe duplicate coalescing, retained alarm rescheduling, and newest-start shutdown accurately.
-- [ ] Mark completed
+- [x] Replace companion `isSyncRunning` and its `AtomicBoolean` import with instance-scoped coordination in `SyncForegroundService.kt`.
+- [x] Update `onStartCommand` to delegate every start, launch `syncManager.performSyncWithCatchUp(syncType = "auto")` only for the surviving generation, and return `START_NOT_STICKY` without calling `stopSelf(startId)` for duplicates.
+- [x] Route successful results, returned failures, thrown exceptions, and `OutOfMemoryError` through the same finalization path, rescheduling each retained ID once via `rescheduleAlarmIfNeeded` before stopping against the newest safe start ID.
+- [x] Update `onTimeout` to cancel the surviving run and finalize against the coordinator's newest start state rather than blindly clearing a global flag and stopping the callback's possibly stale ID.
+- [x] Keep `onDestroy` safe for both normal self-stop and external destruction: it must release coordinator resources and cancel genuinely active work without allowing an old completion to affect a later generation.
+- [x] Refresh the service KDoc and logs so they describe duplicate coalescing, retained alarm rescheduling, and newest-start shutdown accurately.
+- [x] Mark completed
 
 ### Task 4: Add lifecycle regression coverage
 
