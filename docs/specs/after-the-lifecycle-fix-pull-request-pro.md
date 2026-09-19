@@ -41,12 +41,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 3: Validate one pinned candidate SHA
 
-- [ ] Check out the captured candidate SHA in a separate clean detached worktree and run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint`, recording every command and outcome against that SHA rather than a mutable branch name.
-- [ ] Inspect the generated unit-test result files and confirm that `SyncManagerCatchUpTest`, `SyncManagerWebhookDeliveryTest`, and `SyncForegroundServiceLifecycleTest` execute successfully for the configured `foss` and `playstore` application variants.
-- [ ] Confirm that the lifecycle results cover duplicate starts, timeout, stale completion, destruction, and reschedule failures, and that the data-path results cover automatic cursor ordering, bounded overlap, and production webhook-delivery aggregation.
-- [ ] If a gate fails, make the narrowest tested correction on the mutable candidate ref, fold it into the integration commit, capture the new SHA, recreate or reset the detached validation worktree, rerun the affected check, and rerun all three complete commands before review.
-- [ ] Confirm the detached validation worktree is clean and its SHA is unchanged after the successful command set.
-- [ ] Mark completed
+- [x] Check out the captured candidate SHA in a separate clean detached worktree and run `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint`, recording every command and outcome against that SHA rather than a mutable branch name.
+- [x] Inspect the generated unit-test result files and confirm that `SyncManagerCatchUpTest`, `SyncManagerWebhookDeliveryTest`, and `SyncForegroundServiceLifecycleTest` execute successfully for the configured `foss` and `playstore` application variants.
+- [x] Confirm that the lifecycle results cover duplicate starts, timeout, stale completion, destruction, and reschedule failures, and that the data-path results cover automatic cursor ordering, bounded overlap, and production webhook-delivery aggregation.
+- [x] If a gate fails, make the narrowest tested correction on the mutable candidate ref, fold it into the integration commit, capture the new SHA, recreate or reset the detached validation worktree, rerun the affected check, and rerun all three complete commands before review.
+- [x] Confirm the detached validation worktree is clean and its SHA is unchanged after the successful command set.
+- [x] Mark completed
 
 ### Task 4: Run the Review Gate against that exact SHA
 
