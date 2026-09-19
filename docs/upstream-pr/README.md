@@ -74,14 +74,37 @@ Verified review findings were fixed with tests and documentation, folded into th
 
 The reviewed base-to-head range contains none of the following: `docs/specs/`, `docs/upstream-pr/`, `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, dependency upgrades, cleartext policy changes, or idea-forge checkpoint artifacts. The candidate ref, branch history, and upstream diff were not changed while this idea-branch handoff was prepared.
 
-## Owner-only publication command
+## Owner-only publication sequence
 
-Publication is still pending. The owner may run this command only after deciding to publish the reviewed candidate; it has not been run in this implementation phase:
+Publication is still pending, and none of the commands below were run in this implementation phase. The owner must complete these steps in order:
 
-```bash
-gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:feat/offline-catchup-sync-upstream --base main --body-file docs/upstream-pr/offline-catchup-sync.md
-```
+1. Land this idea branch on the fork's `main` and fetch it locally. Confirm that the prior-art document used by the public pull-request body is available at its permanent URL before opening the upstream pull request:
 
-Do not push the candidate ref or edit an existing pull-request description in this phase. No artifact mutation in `mcnaveen/health-connect-webhook` is authorized here.
+   ```bash
+   git fetch origin main
+   git ls-tree -r --name-only origin/main -- docs/upstream-pr/prior-art.md
+   ```
+
+   The second command must print `docs/upstream-pr/prior-art.md`, and <https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md> must resolve.
+
+2. Replace the superseded fork branch with the exact reviewed candidate. The explicit lease makes this fail safely if the remote branch has changed since this handoff was prepared:
+
+   ```bash
+   git push \
+     --force-with-lease=refs/heads/feat/offline-catchup-sync-upstream:8510dddd5dca98ce6c3f83a2c6b5fd69259772b6 \
+     origin \
+     candidate/idea-599-offline-catchup-sync:refs/heads/feat/offline-catchup-sync-upstream
+   git ls-remote origin refs/heads/feat/offline-catchup-sync-upstream
+   ```
+
+   The verification command must report `4604b7a2d252cad740f19c86d71aa39dc78705c7`.
+
+3. Only after both prerequisites pass, create the upstream pull request using the public-only body:
+
+   ```bash
+   gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:feat/offline-catchup-sync-upstream --base main --body-file docs/upstream-pr/offline-catchup-sync.md
+   ```
+
+These are owner follow-ups. No fork branch, pull-request description, or artifact in `mcnaveen/health-connect-webhook` was mutated while preparing this handoff.
 
 Created by Codex

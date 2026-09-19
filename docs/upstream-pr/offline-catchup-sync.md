@@ -7,16 +7,6 @@
 - Add JVM coverage for cursor migration/order, bounded overlap and future cursors, automatic failure semantics, mixed webhook delivery and payload-build failures, and the lifecycle race and cleanup invariants.
 - Add the nine missing locale sets for upstream's existing gRPC delivery strings so the required project lint gate remains green on the current base.
 
-## Candidate record
-
-- Base: `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`
-- Final reviewed head: `4604b7a2d252cad740f19c86d71aa39dc78705c7`
-- Durable local ref: `candidate/idea-599-offline-catchup-sync`
-- Ordered commits:
-  1. `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` — `fix: make automatic catch-up cursor persistence crash-safe and bounded`
-  2. `4604b7a2d252cad740f19c86d71aa39dc78705c7` — `fix: coordinate foreground service lifecycle`
-- Publication status: pending; this document has not been submitted to the upstream fork.
-
 ## Related
 
 - Related to #45, #52
@@ -34,7 +24,7 @@
 - [x] I tested this change locally
 - [x] I updated documentation (if needed)
 - [x] I added/updated tests (if needed)
-- [x] I verified there are no breaking changes — Review Gate passed for `4604b7a2d252cad740f19c86d71aa39dc78705c7`
+- [x] I verified there are no breaking changes
 - [x] I checked for sensitive data/secrets
 
 ## Screenshots / Recordings (if UI changes)
@@ -59,11 +49,11 @@ Each slice uses `performSync(start, end)`, so it inherits `HealthConnectManager`
 
 ### Prior art
 
-The fork handoff searched upstream issues and pull requests for `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`; full results remain in [`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md). No prior rejection was found. PR #6 added user-initiated historical-range sync, which is complementary rather than equivalent. PR #52's retry/throttle work is reused directly.
+Upstream issues and pull requests were searched for `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`; full results are in [`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md). No prior rejection was found. PR #6 added user-initiated historical-range sync, which is complementary rather than equivalent. PR #52's retry/throttle work is reused directly.
 
 ## Validation
 
-The detached clean validation worktree passed every complete gate at the exact reviewed SHA `4604b7a2d252cad740f19c86d71aa39dc78705c7`:
+The complete build, test, and lint gates pass:
 
 ```text
 ./gradlew assembleDebug  PASS
@@ -76,25 +66,5 @@ The unit-test result files for each `fossDebug`, `fossRelease`, `playstoreDebug`
 - `SyncManagerCatchUpTest`: 36 tests
 - `SyncManagerWebhookDeliveryTest`: 9 tests
 - `SyncForegroundServiceLifecycleTest`: 9 tests
-
-## Review Gate
-
-A fresh Review Gate reviewed exactly `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e..4604b7a2d252cad740f19c86d71aa39dc78705c7` in the clean candidate worktree. It covered automatic-cursor ordering and overlap, webhook-delivery aggregation, lifecycle races and cleanup, regression coverage, upstream-base fidelity, compact history, and absence of fork-only artifacts. The final result was **no unresolved verified findings**.
-
-The review found no production-code defect. Verified coverage gaps were fixed with regression tests for mixed success plus `PayloadBuildFailed` delivery and future automatic cursors. Earlier verified documentation/log-filter/overlap findings were also folded into the integration commit and re-reviewed at this same final SHA. The documented payload-cap behavior, base-preserved destroy behavior, and minor scope/style observations were investigated and demonstrated not to be defects.
-
-## Upstream-only handoff boundary
-
-The reviewed range contains no `docs/specs/`, `docs/upstream-pr/`, manifest, network-security, Gradle/dependency/version, `MockPayloadBuilder.kt`, dependency-upgrade, cleartext-policy, or checkpoint artifacts. These handoff files exist only on the idea branch. Preparing them did not alter the local candidate ref, candidate SHA, history, upstream diff, or any fork artifact.
-
-## Owner-only publication command
-
-Publication remains pending and this command has not been run. The owner may run it only after deciding to publish the reviewed candidate:
-
-```bash
-gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:feat/offline-catchup-sync-upstream --base main --body-file docs/upstream-pr/offline-catchup-sync.md
-```
-
-Do not push the candidate branch or edit the existing fork pull-request description in this phase. No command here may create, comment on, review, merge, or otherwise mutate any artifact in `mcnaveen/health-connect-webhook`.
 
 Created by Codex
