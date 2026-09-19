@@ -32,12 +32,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 2: Prove the history and diff are upstream-only
 
-- [ ] Verify that the candidate merge base is exactly `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`, that `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` is the first candidate commit with that parent, and that the candidate head initially has `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` as its parent.
-- [ ] Compare the initial combined tree with `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` and confirm that only `app/src/main/java/com/hcwebhook/app/SyncForegroundService.kt` and `app/src/test/java/com/hcwebhook/app/SyncForegroundServiceLifecycleTest.kt` differ.
-- [ ] Verify that the initial base-to-head path set is exactly the union of the paths changed by `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` and the lifecycle test path, with `SyncForegroundService.kt` carrying both candidates’ changes.
-- [ ] Inspect the complete base-to-head name list and diffstat. Exclude `docs/specs/`, `docs/upstream-pr/`, `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, dependency upgrades, cleartext policy, and every idea-forge checkpoint artifact.
-- [ ] Confirm the candidate worktree is clean and capture its exact SHA, complete ordered commit list, and base-to-head diffstat for validation and handoff evidence.
-- [ ] Mark completed
+- [x] Verify that the candidate merge base is exactly `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`, that `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` is the first candidate commit with that parent, and that the candidate head initially has `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` as its parent.
+- [x] Compare the initial combined tree with `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` and confirm that only `app/src/main/java/com/hcwebhook/app/SyncForegroundService.kt` and `app/src/test/java/com/hcwebhook/app/SyncForegroundServiceLifecycleTest.kt` differ.
+- [x] Verify that the initial base-to-head path set is exactly the union of the paths changed by `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` and the lifecycle test path, with `SyncForegroundService.kt` carrying both candidates’ changes.
+- [x] Inspect the complete base-to-head name list and diffstat. Exclude `docs/specs/`, `docs/upstream-pr/`, `AndroidManifest.xml`, `network_security_config.xml`, `app/build.gradle.kts`, `gradle/libs.versions.toml`, `MockPayloadBuilder.kt`, dependency upgrades, cleartext policy, and every idea-forge checkpoint artifact.
+- [x] Confirm the candidate worktree is clean and capture its exact SHA, complete ordered commit list, and base-to-head diffstat for validation and handoff evidence.
+- [x] Mark completed
 
 ### Task 3: Validate one pinned candidate SHA
 
