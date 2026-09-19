@@ -24,7 +24,7 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 1: Assemble the local candidate on the preserved base
 
-- [ ] Verify that `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` has parent `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`, and verify the two lifecycle source blobs at `ded652177eeb3f5056d5c65e29f46550632a8746` before changing any candidate ref.
+- [x] Verify that `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` has parent `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`, and verify the two lifecycle source blobs at `ded652177eeb3f5056d5c65e29f46550632a8746` before changing any candidate ref.
 - [ ] Create a fresh clean worktree and durable local ref for the reviewed candidate from `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`; leave the existing stale candidate worktree, uncommitted user work, and both remotes untouched.
 - [ ] Retain `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` as the first candidate commit, then apply only the path-limited lifecycle difference for `SyncForegroundService.kt` and `SyncForegroundServiceLifecycleTest.kt` as one focused integration commit.
 - [ ] Verify that the resulting lifecycle file blobs exactly match `ded652177eeb3f5056d5c65e29f46550632a8746` and preserve duplicate-start coalescing, retained schedule-ID rescheduling, generation-safe completion, timeout cancellation, destruction behavior, and alarm-reschedule failure isolation.
