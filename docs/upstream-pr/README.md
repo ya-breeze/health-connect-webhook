@@ -23,7 +23,7 @@ The first commit is retained unchanged. The integration commit adds the lifecycl
  README.md                                          |  11 +
  .../java/com/hcwebhook/app/HealthConnectManager.kt |   2 +-
  .../com/hcwebhook/app/LocalTcpServerManager.kt     |   6 +-
- .../java/com/hcwebhook/app/PreferencesManager.kt   |  12 +
+ .../java/com/hcwebhook/app/PreferencesManager.kt   |  12 +-
  .../com/hcwebhook/app/SyncForegroundService.kt     | 224 ++++++--
  app/src/main/java/com/hcwebhook/app/SyncManager.kt | 619 +++++++++++++++------
  app/src/main/java/com/hcwebhook/app/SyncWorker.kt  |   2 +-
