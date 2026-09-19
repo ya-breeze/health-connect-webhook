@@ -50,12 +50,12 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 4: Run the Review Gate against that exact SHA
 
-- [ ] Invoke a fresh Codex Review Gate for the exact `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` to pinned-candidate range; do not review the idea branch, a dirty worktree, or either stale candidate head.
-- [ ] Require the review to cover automatic-cursor ordering and overlap behavior, webhook-delivery aggregation, `SyncForegroundServiceLifecycleCoordinator` race and cleanup invariants, regression coverage, upstream-base fidelity, compact history, and absence of fork-only artifacts.
-- [ ] Investigate every finding against the pinned tree, fix every verified finding with regression coverage where applicable, and retain concise evidence for any finding demonstrated not to apply.
-- [ ] Whenever a fix changes the candidate, fold the remediation into the integration commit, capture the new SHA, rerun affected checks plus `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint`, and run another fresh Review Gate against the new exact SHA.
-- [ ] Finish only when the final Review Gate has no unresolved verified findings and its reviewed SHA exactly matches the clean SHA that passed all three complete Gradle commands.
-- [ ] Mark completed
+- [x] Invoke a fresh Codex Review Gate for the exact `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e` to pinned-candidate range; do not review the idea branch, a dirty worktree, or either stale candidate head.
+- [x] Require the review to cover automatic-cursor ordering and overlap behavior, webhook-delivery aggregation, `SyncForegroundServiceLifecycleCoordinator` race and cleanup invariants, regression coverage, upstream-base fidelity, compact history, and absence of fork-only artifacts.
+- [x] Investigate every finding against the pinned tree, fix every verified finding with regression coverage where applicable, and retain concise evidence for any finding demonstrated not to apply.
+- [x] Whenever a fix changes the candidate, fold the remediation into the integration commit, capture the new SHA, rerun affected checks plus `./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint`, and run another fresh Review Gate against the new exact SHA.
+- [x] Finish only when the final Review Gate has no unresolved verified findings and its reviewed SHA exactly matches the clean SHA that passed all three complete Gradle commands.
+- [x] Mark completed
 
 ### Task 5: Record the reviewed local handoff without publishing it
 
