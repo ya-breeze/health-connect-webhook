@@ -59,8 +59,8 @@ Out of scope, deliberately: do NOT mark the pull request ready for review and do
 
 ### Task 5: Record the reviewed local handoff without publishing it
 
-- [ ] Refresh `docs/upstream-pr/README.md` on the idea branch with the exact base and final reviewed head SHAs, durable local candidate ref, complete ordered commit list, base-to-head diffstat, successful validation results, final Review Gate result, upstream-only exclusion audit, and an explicit statement that publication remains pending.
-- [ ] Refresh `docs/upstream-pr/offline-catchup-sync.md` so its summary, lifecycle description, validation text, and every review-dependent checkbox describe the same final SHA; neither `754389566f546c8c520852354cda3db55e57b47c` nor `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` may be presented as current or final.
-- [ ] Preserve the owner-only upstream `gh pr create` command exactly as documentation, state that it has not been run, and retain the prohibition on every artifact mutation in `mcnaveen/health-connect-webhook`.
-- [ ] Verify that these fork-only handoff edits exist only on the idea branch and do not alter the reviewed candidate ref, SHA, history, or upstream diff; do not push the candidate branch or edit the existing fork pull-request description in this part.
-- [ ] Mark completed
+- [x] Refresh `docs/upstream-pr/README.md` on the idea branch with the exact base and final reviewed head SHAs, durable local candidate ref, complete ordered commit list, base-to-head diffstat, successful validation results, final Review Gate result, upstream-only exclusion audit, and an explicit statement that publication remains pending.
+- [x] Refresh `docs/upstream-pr/offline-catchup-sync.md` so its summary, lifecycle description, validation text, and every review-dependent checkbox describe the same final SHA; neither `754389566f546c8c520852354cda3db55e57b47c` nor `8510dddd5dca98ce6c3f83a2c6b5fd69259772b6` may be presented as current or final.
+- [x] Preserve the owner-only upstream `gh pr create` command exactly as documentation, state that it has not been run, and retain the prohibition on every artifact mutation in `mcnaveen/health-connect-webhook`.
+- [x] Verify that these fork-only handoff edits exist only on the idea branch and do not alter the reviewed candidate ref, SHA, history, or upstream diff; do not push the candidate branch or edit the existing fork pull-request description in this part.
+- [x] Mark completed
