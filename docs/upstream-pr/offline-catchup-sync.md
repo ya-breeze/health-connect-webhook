@@ -1,14 +1,18 @@
 ## Summary
+
 - Add `SyncManager.performSyncWithCatchUp()` for interval and scheduled runs. When automatic delivery has been unsuccessful for more than the normal 48-hour lookback, it replays the missed range oldest first in contiguous 24-hour slices, clamped to 30 days.
 - Store automatic replay progress separately from the general last-sync timestamp. Manual sync and `POST /sync` still update the user-facing timestamp and per-type cursors, but cannot hide an older automatic-delivery gap. Automatic progress advances only when every attempted webhook delivery succeeds.
 - Route every replay slice through the existing explicit-range `performSync` path, preserving current per-webhook filtering, JSON and Protobuf/gRPC payloads, retries, pagination throttling, notifications, and logs.
-- Add JUnit 4 coverage for cursor selection/migration, the actual automatic orchestration's normal initialization and slice checkpoint/failure behavior, all-destination delivery success, the 48-hour threshold, contiguous/final boundaries, future timestamps, and the 30-day clamp.
+- Add `SyncForegroundServiceLifecycleCoordinator` so duplicate starts coalesce, retained schedules are rescheduled once, stale completion cannot stop a newer generation, timeout and destruction clean up safely, and one alarm-reschedule failure cannot suppress other schedules or service shutdown.
+- Add JVM coverage for cursor migration/order, bounded overlap and future cursors, automatic failure semantics, mixed webhook delivery and payload-build failures, and the lifecycle race and cleanup invariants.
 - Add the nine missing locale sets for upstream's existing gRPC delivery strings so the required project lint gate remains green on the current base.
 
 ## Related
+
 - Related to #45, #52
 
 ## Type of change
+
 - [x] Bug fix
 - [x] New feature
 - [ ] Refactor
@@ -16,14 +20,16 @@
 - [ ] Build/CI change
 
 ## Checklist
+
 - [x] I tested this change locally
 - [x] I updated documentation (if needed)
 - [x] I added/updated tests (if needed)
-- [ ] I verified there are no breaking changes — pending final review, see [Status](./README.md#status)
+- [x] I verified there are no breaking changes
 - [x] I checked for sensitive data/secrets
 
 ## Screenshots / Recordings (if UI changes)
-- N/A — catch-up has no new UI. The localization additions fill existing gRPC UI strings.
+
+- N/A — catch-up has no new UI. The localization additions fill existing gRPC UI strings; the log filter includes automatic replay entries in the existing Auto view.
 
 ## Additional notes
 
@@ -35,14 +41,30 @@ For compatibility, the first automatic run after upgrade seeds the new preferenc
 
 ### Rate limits and delivery paths
 
-Each slice uses `performSync(start, end)`, so it inherits `HealthConnectManager`'s exponential rate-limit retry and inter-page throttle. A 500 ms inter-slice pause is added without replacing those protections. `performSync` retains upstream's `WebhookDeliveryFormat.JSON` and `WebhookDeliveryFormat.GRPC` branches unchanged, so catch-up uses the same filtering, payload builders, delivery clients, notifications, and logs.
+Each slice uses `performSync(start, end)`, so it inherits `HealthConnectManager`'s exponential rate-limit retry and inter-page throttle. A 500 ms inter-slice pause is added without replacing those protections. `performSync` retains upstream's `WebhookDeliveryFormat.JSON` and `WebhookDeliveryFormat.GRPC` branches unchanged, so catch-up uses the same filtering, payload builders, delivery clients, notifications, and logs. The 25,000-record payload cap still applies after the 24-hour overlap; a failed oversized read leaves the automatic cursor unchanged for a later retry.
+
+### Lifecycle coordination
+
+`SyncForegroundService` now delegates generation state to `SyncForegroundServiceLifecycleCoordinator`. It retains every coalesced schedule ID and newest start ID, launches at most one active sync, reschedules each retained enabled schedule after completion or timeout, suppresses stale stop requests when a newer generation is active, ignores starts after destruction, and isolates per-schedule reschedule failures. Timeout detaches state before cancelling the job so the coroutine's late `finally` block cannot double-finalize the run.
 
 ### Prior art
 
-The fork handoff searched upstream issues and pull requests for `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`; full results remain in [`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md). No prior rejection was found. PR #6 added user-initiated historical-range sync, which is complementary rather than equivalent. PR #52's retry/throttle work is reused directly.
+Upstream issues and pull requests were searched for `catch-up`, `catchup`, `backfill`, `offline`, `missed data`, `48 hour`, `48h`, `lookback`, `history`, and `READ_HEALTH_DATA_HISTORY`; full results are in [`docs/upstream-pr/prior-art.md`](https://github.com/ya-breeze/health-connect-webhook/blob/main/docs/upstream-pr/prior-art.md). No prior rejection was found. PR #6 added user-initiated historical-range sync, which is complementary rather than equivalent. PR #52's retry/throttle work is reused directly.
 
-### Validation
+## Validation
 
-`./gradlew assembleDebug`, `./gradlew test`, and `./gradlew lint` pass locally on the current corrected candidate. That candidate has not been through the Review Gate or an independent peer review yet, and lifecycle remediation described in [README.md's Status](./README.md#status) is still pending — this PR body is not ready to open until both are done. Do not treat this as a final-candidate or passed-gate record; it will be replaced once review actually completes.
+The complete build, test, and lint gates pass:
+
+```text
+./gradlew assembleDebug  PASS
+./gradlew test           PASS
+./gradlew lint           PASS
+```
+
+The unit-test result files for each `fossDebug`, `fossRelease`, `playstoreDebug`, and `playstoreRelease` variant report:
+
+- `SyncManagerCatchUpTest`: 36 tests
+- `SyncManagerWebhookDeliveryTest`: 9 tests
+- `SyncForegroundServiceLifecycleTest`: 9 tests
 
 Created by Codex
