@@ -15,6 +15,13 @@ Treat each candidate SHA as immutable evidence. Validate it in a separate detach
 
 This part deliberately stops before remote publication. It must not push or otherwise update `origin/feat/offline-catchup-sync-upstream`, and it must not edit any existing GitHub pull request. It will prepare `docs/upstream-pr/README.md` and `docs/upstream-pr/offline-catchup-sync.md` with the reviewed local evidence while stating accurately that publication remains pending. Updating the fork branch and the existing `ya-breeze/health-connect-webhook` pull-request description is deferred until the lifecycle prerequisite and this reviewed-candidate change have landed. The command `gh pr create --repo mcnaveen/health-connect-webhook --head ya-breeze:feat/offline-catchup-sync-upstream --base main --body-file docs/upstream-pr/offline-catchup-sync.md` remains owner-only documentation and must not be executed. No part of this work may create, comment on, review, or merge an issue or pull request in `mcnaveen/health-connect-webhook`.
 
+## Ground rules
+This spec is implemented by an automated pass running unattended. **There is no approval step and nothing is waiting for one** — do not look for a tick, a marker, or a sign-off anywhere, and do not wait for one.
+
+Tick the boxes in this file as the work is completed; they are the record of progress, and the pipeline reads them to decide whether the change is finished.
+
+Out of scope, deliberately: do NOT mark the pull request ready for review and do NOT call a forge merge API. Implementation marks the pull request ready only after the task list is complete. Afterward Completion may ask the Store to perform Automatic Merge only when the planner and final implementation agent authorized the exact result. Leave the pull request in a state worth reading.
+
 ### Task 1: Assemble the local candidate on the preserved base
 
 - [ ] Verify that `478fd2904fb8d0d64fb2a60b160c534c4ee5bbaf` has parent `7555b53b8fa6eb3ea1bad5ae83cdfc909fbe459e`, and verify the two lifecycle source blobs at `ded652177eeb3f5056d5c65e29f46550632a8746` before changing any candidate ref.
