@@ -21,9 +21,9 @@ Existing contexts in other projects remain unchanged. This is documentation only
 git diff --check
 
 ### Task 1: Record and merge the project vocabulary
-- [ ] Define the current domain terms and important distinctions without inventing future behavior.
-- [ ] Verify every definition against source and the existing domain-doc pointer.
-- [ ] Run applicable native checks and record relevant E2E limitations.
-- [ ] Run the Review Gate and resolve verified findings.
-- [ ] Prepare the reviewed result for the owner-authorized merge.
-- [ ] Mark completed.
+- [x] Define the current domain terms and important distinctions without inventing future behavior.
+- [x] Verify every definition against source and the existing domain-doc pointer.
+- [x] Run applicable native checks and record relevant E2E limitations.
+- [x] Run the Review Gate and resolve verified findings.
+- [x] Prepare the reviewed result for the owner-authorized merge.
+- [x] Mark completed.
