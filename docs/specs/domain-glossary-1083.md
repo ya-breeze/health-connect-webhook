@@ -16,6 +16,8 @@ Existing contexts in other projects remain unchanged. This is documentation only
 
 ## Validation Commands
 
+./gradlew test
+./gradlew lint
 git diff --check
 
 ### Task 1: Record and merge the project vocabulary
@@ -23,5 +25,5 @@ git diff --check
 - [ ] Verify every definition against source and the existing domain-doc pointer.
 - [ ] Run applicable native checks and record relevant E2E limitations.
 - [ ] Run the Review Gate and resolve verified findings.
-- [ ] Verify the exact merge and canonical Completion outcome.
+- [ ] Prepare the reviewed result for the owner-authorized merge.
 - [ ] Mark completed.
